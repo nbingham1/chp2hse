@@ -1,316 +1,454 @@
-
-#include "../common.h"
-#include "../utility.h"
-#include "../type.h"
-#include "../data.h"
+/*
+ * assignment.cpp
+ *
+ *  Created on: Apr 8, 2014
+ *      Author: nbingham
+ */
 
 #include "assignment.h"
-#include "parallel.h"
-#include "condition.h"
+#include "composition.h"
+#include "control.h"
+#include "operator.h"
+#include "../message.h"
 
 assignment::assignment()
 {
-	_kind = "assignment";
+	this->_kind = "assignment";
+	this->preface = NULL;
 }
 
-assignment::assignment(instruction *parent, sstring chp, variable_space *vars, flag_space *flags)
+assignment::assignment(tokenizer &tokens, type_space &types, variable_space &vars, instruction *parent)
 {
-	this->_kind		= "assignment";
-	this->chp		= chp;
-	this->flags 	= flags;
-	this->vars		= vars;
-	this->parent	= parent;
+	this->_kind = "assignment";
+	this->parent = parent;
+	this->preface = NULL;
 
-	expand_shortcuts();
-	parse();
+	parse(tokens, types, vars);
+}
+
+assignment::assignment(instruction *instr, tokenizer &tokens, variable_space &vars, instruction *parent, map<string, string> rename)
+{
+	this->_kind = "assignment";
+	this->preface = NULL;
+
+	if (instr == NULL)
+		internal(tokens, "attempting to copy a '" + kind() + "' from a null instruction pointer", __FILE__, __LINE__);
+	else if (instr->kind() != kind())
+		internal(tokens, "attempting to copy a '" + kind() + "' from a '" + instr->kind() + "' pointer", __FILE__, __LINE__);
+	else
+	{
+		assignment *source = (assignment*)instr;
+		this->parent = parent;
+		for (size_t i = 0; i < source->expr.size(); i++)
+		{
+			this->expr.push_back(pair<variable_name*, expression*>(NULL, NULL));
+			if (source->expr[i].first != NULL)
+				this->expr.back().first = new variable_name(source->expr[i].first, tokens, vars, this, rename);
+
+			if (source->expr[i].second != NULL)
+				this->expr.back().second = new expression(source->expr[i].second, tokens, vars, this, rename);
+		}
+	}
+}
+
+assignment::assignment(tokenizer &tokens, type_space &types, variable_space &vars, int count, ...)
+{
+	this->_kind = "assignment";
+	this->preface = NULL;
+	this->parent = parent;
+
+	va_list args;
+
+	va_start(args, count);
+	for (int i = 0; i < count; i++)
+	{
+		instruction *left = (instruction*)va_arg(args, instruction*);
+		if (left == NULL || left->kind() != "variable_name")
+			internal(tokens, "expected a variable name in manual instantiation", __FILE__, __LINE__);
+		else
+			left->parent = this;
+
+		instruction *right = (instruction*)va_arg(args, instruction*);
+		if (right == NULL || right->kind() != "expression")
+			internal(tokens, "expected an expression in manual instantiation", __FILE__, __LINE__);
+		else
+			right->parent = this;
+
+		this->expr.push_back(pair<variable_name*, expression*>((variable_name*)left, (expression*)right));
+	}
+	va_end(args);
 }
 
 assignment::~assignment()
 {
-	_kind = "assignment";
+	for (vector<pair<variable_name*, expression*> >::iterator i = expr.begin(); i != expr.end(); i++)
+	{
+		delete i->first;
+		delete i->second;
+	}
+	expr.clear();
+
+	if (preface != NULL)
+		delete preface;
+	preface = NULL;
 }
 
-/* duplicate()
- *
- * This copies a guard to another process and replaces
- * all of the specified variables.
- */
-instruction *assignment::duplicate(instruction *parent, variable_space *vars, smap<sstring, sstring> convert)
+bool assignment::is_next(tokenizer &tokens, size_t i)
 {
-	assignment *instr;
+	return variable_name::is_next(tokens, i) && tokens.peek(i) != "skip" && (tokens.peek(i+1) == "+" || tokens.peek(i+1) == "-" || tokens.peek(i+1) == ":=" || tokens.peek(i+1) == "," || slice::is_next(tokens, i+1));
+}
 
-	instr 				= new assignment();
-	instr->chp			= this->chp;
-	instr->vars			= vars;
-	instr->flags 		= flags;
-	instr->expr			= this->expr;
-	instr->parent		= parent;
-
-	int idx;
-	sstring rep;
-
-	smap<sstring, sstring>::iterator i, j;
-	list<pair<sstring, sstring> >::iterator e;
-	int k = 0, min, curr;
-	while (k != instr->chp.npos)
+void assignment::parse(tokenizer &tokens, type_space &types, variable_space &vars)
+{
+	start_token = tokens.index+1;
+	string token;
+	do
 	{
-		j = convert.end();
-		min = instr->chp.length();
-		curr = 0;
-		for (i = convert.begin(); i != convert.end(); i++)
+		tokens.increment();
+		tokens.push_expected("[variable name]");
+		tokens.push_bound(",");
+		tokens.push_bound(":=");
+		tokens.syntax(__FILE__, __LINE__);
+		tokens.decrement();
+
+		if (variable_name::is_next(tokens))
+			expr.push_back(pair<variable_name*, expression*>(new variable_name(tokens, types, vars, this), NULL));
+
+		tokens.increment();
+		tokens.push_expected(",");
+		tokens.push_expected(":=");
+		if (token == "")
 		{
-			curr = find_name(instr->chp, i->first, k);
-			if (curr < min && curr >= 0)
+			tokens.push_expected("+");
+			tokens.push_expected("-");
+		}
+		token = tokens.syntax(__FILE__, __LINE__);
+		tokens.decrement();
+	} while (token == ",");
+
+	if (token == "+" && expr.size() > 0)
+	{
+		expr[0].second = new expression(tokens, types, vars, 1);
+		expr[0].second->parent = this;
+
+		if (expr[0].first != NULL && expr[0].first->var.is_valid() && vars.at(expr[0].first->var).type_string() != "node<1>")
+			error(tokens, "operand must be of type 'node<1>', not '" + vars.at(expr[0].first->var).type_string() + "'", "", __FILE__, __LINE__);
+	}
+	else if (token == "-" && expr.size() > 0)
+	{
+		expr[0].second = new expression(tokens, types, vars, 0);
+		expr[0].second->parent = this;
+
+		if (expr[0].first != NULL && expr[0].first->var.is_valid() && vars.at(expr[0].first->var).type_string() != "node<1>")
+			error(tokens, "operand must be of type 'node<1>', not '" + vars.at(expr[0].first->var).type_string() + "'", "", __FILE__, __LINE__);
+	}
+	else if (token == ":=" && expr.size() > 0)
+	{
+		size_t i = 0;
+		do
+		{
+			tokens.increment();
+			tokens.push_expected("[expression]");
+			tokens.push_bound(",");
+			tokens.syntax(__FILE__, __LINE__);
+			tokens.decrement();
+
+			if (expression::is_next(tokens))
 			{
-				min = curr;
-				j = i;
+				expr[i].second = new expression(tokens, types, vars, this);
+
+				if (expr[i].first != NULL && expr[i].second != NULL && expr[i].second->type_string(vars) != expr[i].first->type_string(vars) && (expr[i].first->type_string(vars).find("node") == string::npos || expr[i].second->val == NULL))
+					error(tokens, "type mismatch '" + expr[i].first->type_string(vars) + "' and '" + expr[i].second->type_string(vars) + "'", "", __FILE__, __LINE__);
+			}
+
+			i++;
+			if (i < expr.size())
+			{
+				tokens.increment();
+				tokens.push_expected(",");
+				token = tokens.syntax(__FILE__, __LINE__);
+				tokens.decrement();
+			}
+		} while (token == "," && i < expr.size());
+
+		if (i < expr.size())
+			error(tokens, "expected " + to_string(expr.size() - i) + " more expressions", "the number of expressions on the right must match the number of variables on the left", __FILE__, __LINE__);
+	}
+
+	preface = new composition();
+	for (size_t i = 0; i < expr.size(); i++)
+	{
+		if (expr[i].second != NULL && expr[i].second->preface != NULL)
+		{
+			if (((composition*)preface)->terms.size() != 0)
+				((composition*)preface)->operators.push_back("||");
+			((composition*)preface)->terms.push_back(expr[i].second->preface);
+			expr[i].second->preface->parent = preface;
+			expr[i].second->preface = NULL;
+		}
+	}
+
+	if (((composition*)preface)->terms.size() == 0)
+	{
+		delete preface;
+		preface = NULL;
+	}
+	else if (((composition*)preface)->terms.size() == 1)
+	{
+		instruction *temp = ((composition*)preface)->terms[0];
+		((composition*)preface)->terms.clear();
+		delete preface;
+		preface = temp;
+	}
+
+	vector<instruction*> postface;
+
+	/* At this point, we have a collection of multi-bit flat
+	 * assignments (var := var1 or var := 0 or var := 1) that
+	 * we need to expand into a collection of single bit
+	 * constant assignments (var := 0 or var := 1). In doing
+	 * so, we will need to place conditionals to deal with the
+	 * var := var case.
+	 */
+	for (size_t i = 0; i < expr.size(); )
+	{
+		if (expr[i].first != NULL && expr[i].first->var.is_valid() && expr[i].second != NULL)
+		{
+			int width = 0;
+			keyword *type = types.find("node");
+			if (expr[i].first->var.is_valid())
+			{
+				width = vars.at(expr[i].first->var).width;
+				type = vars.at(expr[i].first->var).type;
+			}
+
+			if (expr[i].first->bits != NULL)
+				width = expr[i].first->bits->end.value - expr[i].first->bits->start.value;
+
+			// Bake in all node assignments
+			if (type != NULL && type->name == "node")
+			{
+				if (width == 1 && expr[i].second->val != NULL)
+					postface.push_back(new assignment(tokens, types, vars, 1, expr[i].first, expr[i].second));
+				else if (width == 1 && (expr[i].second->var != NULL || expr[i].second->expr != "null"))
+					postface.push_back(new control(tokens, types, vars, expr[i].first, expr[i].second));
+				else if (width > 1 && expr[i].second->val != NULL)
+				{
+					for (size_t j = 0; j < vars.globals.size(); j++)
+					{
+						size_t idx_start = vars.globals[j].name.find_last_of("[")+1;
+						size_t idx_end = vars.globals[j].name.find_last_of("]");
+
+						int index = 0;
+						if (idx_start != string::npos && idx_end != string::npos)
+							index = atoi(vars.globals[j].name.substr(idx_start, idx_end - idx_start).c_str());
+						if (vars.globals[j].name.substr(0, expr[i].first->name.value.size()) == expr[i].first->name.value && (expr[i].first->bits == NULL || (index >= expr[i].first->bits->start.value && index < expr[i].first->bits->end.value)))
+						{
+							variable_name *left = new variable_name(tokens, types, vars, variable_index(j, false), NULL);
+							expression *right = new expression(tokens, types, vars, (expr[i].second->val->value >> index) & 0x01);
+							postface.push_back(new assignment(tokens, types, vars, 1, left, right));
+						}
+					}
+
+					delete expr[i].first;
+					delete expr[i].second;
+				}
+				else if (width > 1 && expr[i].second->var != NULL)
+				{
+					for (size_t j = 0; j < vars.globals.size(); j++)
+					{
+						size_t idx_start = vars.globals[j].name.find_last_of("[")+1;
+						size_t idx_end = vars.globals[j].name.find_last_of("]");
+
+						int index = 0;
+						if (idx_start != string::npos && idx_end != string::npos)
+							index = atoi(vars.globals[j].name.substr(idx_start, idx_end - idx_start).c_str());
+
+						if (vars.globals[j].name.substr(0, expr[i].first->name.value.size()) == expr[i].first->name.value && ((expr[i].second->var == NULL && (expr[i].second->val != NULL || index == 0)) || (expr[i].second->var != NULL && expr[i].second->var->in_bounds(vars, index))))
+						{
+							string set_name = expr[i].second->expr_string(vars) + vars.globals[j].name.substr(expr[i].first->name.value.size());
+							variable_name *left = new variable_name(tokens, types, vars, variable_index(j, false), NULL);
+							expression *right = new expression(tokens, types, vars, set_name);
+							postface.push_back(new control(tokens, types, vars, left, right));
+						}
+					}
+
+					delete expr[i].first;
+					delete expr[i].second;
+				}
+			}
+			else
+			{
+				string op = "operator:=(" + vars.at(expr[i].first->var).type_string() + "," + expr[i].second->type_string(vars) + ")";
+
+				operate *optype = ((operate*)types.find(op));
+				if (optype == NULL || optype->kind() != "operator")
+					error(tokens, "undefined operator '" + op + "'", "did you mean " + types.closest(op), __FILE__, __LINE__);
+				else if (optype->args.size() > 0)
+				{
+					vector<string> inputs;
+					inputs.push_back(expr[i].first->name.value);
+					inputs.push_back(expr[i].second->expr_string(vars));
+
+					instruction *post = vars.insert(tokens, variable(vars.unique_name(optype), optype, 0, false, inputs, start_token));
+
+					if (post != NULL)
+						postface.push_back(post);
+				}
+
+				delete expr[i].first;
+				delete expr[i].second;
 			}
 		}
+		else if (expr[i].first != NULL)
+			delete expr[i].first;
+		else if (expr[i].second != NULL)
+			delete expr[i].second;
 
-		if (j != convert.end())
-		{
-			rep = j->second;
-			instr->chp.replace(min, j->first.length(), rep);
-			if (instr->chp[min + rep.length()] == '[' && instr->chp[min + rep.length()-1] == ']')
-			{
-				idx = instr->chp.find_first_of("]", min + rep.length()) + 1;
-				rep = flatten_slice(instr->chp.substr(min, idx - min));
-				instr->chp.replace(min, idx - min, rep);
-			}
+		expr.erase(expr.begin() + i);
+	}
 
-			k = min + rep.length();
-		}
+	if (preface != NULL && postface.size() > 0)
+	{
+		composition *new_preface = new composition();
+		new_preface->parent = this;
+		new_preface->terms.push_back(preface);
+		preface->parent = this;
+		if (postface.size() > 1)
+			new_preface->terms.push_back(new composition(tokens, types, vars, ",", postface));
 		else
-			k = instr->chp.npos;
-	}
-
-	for (e = instr->expr.begin(); e != instr->expr.end(); e++)
-	{
-		k = 0;
-		while (k != e->first.npos)
 		{
-
-			j = convert.end();
-			min = e->first.length();
-			curr = 0;
-			for (i = convert.begin(); i != convert.end(); i++)
-			{
-				curr = find_name(e->first, i->first, k);
-				if (curr < min && curr >= 0)
-				{
-					min = curr;
-					j = i;
-				}
-			}
-
-			if (j != convert.end())
-			{
-				rep = j->second;
-				e->first.replace(min, j->first.length(), rep);
-				if (e->first[min + rep.length()] == '[' && e->first[min + rep.length()-1] == ']')
-				{
-					idx = e->first.find_first_of("]", min + rep.length()) + 1;
-					rep = flatten_slice(e->first.substr(min, idx - min));
-					e->first.replace(min, idx - min, rep);
-				}
-
-				k = min + rep.length();
-			}
-			else
-				k = e->first.npos;
+			new_preface->terms.push_back(postface[0]);
+			postface[0]->parent = new_preface;
 		}
-
-		k = 0;
-		while (k != e->second.npos)
-		{
-			j = convert.end();
-			min = e->second.length();
-			curr = 0;
-			for (i = convert.begin(); i != convert.end(); i++)
-			{
-				curr = find_name(e->second, i->first, k);
-				if (curr < min && curr >= 0)
-				{
-					min = curr;
-					j = i;
-				}
-			}
-
-			if (j != convert.end())
-			{
-				rep = j->second;
-				e->second.replace(min, j->first.length(), rep);
-				if (e->second[min + rep.length()] == '[' && e->second[min + rep.length()-1] == ']')
-				{
-					idx = e->second.find_first_of("]", min + rep.length()) + 1;
-					rep = flatten_slice(e->second.substr(min, idx - min));
-					e->second.replace(min, idx - min, rep);
-				}
-
-				k = min + rep.length();
-			}
-			else
-				k = e->second.npos;
-		}
+		new_preface->operators.push_back(";");
+		preface = new_preface;
 	}
+	else if (postface.size() > 1)
+		preface = new composition(tokens, types, vars, ",", postface);
+	else if (postface.size() > 0)
+		preface = postface[0];
 
-	list<pair<sstring, sstring> >::iterator ei;
-	variable *ev;
-	for (ei = instr->expr.begin(); ei != instr->expr.end(); ei++)
-	{
-		ev = vars->find(ei->first);
-		if (ev != NULL)
-			ev->driven = true;
-	}
+	postface.clear();
 
-	return instr;
+	if (preface != NULL)
+		preface->parent = this;
+
+	end_token = tokens.index;
 }
 
-/* Expand shortcut handles cases of implied syntax.
- * It runs before parsing, and translates user input from main.chp into a standard
- * form that parse can recognize. In assignment, the implied syntax is var+ and var-
- */
-void assignment::expand_shortcuts()
+vector<dot_node_id> assignment::build_hse(variable_space &vars, vector<dot_stmt> &stmts, vector<dot_node_id> last, int &num_places, int &num_transitions)
 {
-	// Convert var+ to var:=1
-	if(chp.find(":=") == chp.npos && chp.find("+") != chp.npos)
-		chp = chp.substr(0, chp.find("+")) + ":=1";
+	vector<dot_node_id> result;
+	for (size_t i = 0; i < expr.size(); i++)
+	{
+		dot_node_id trans("T" + to_string(num_transitions++));
+		string trans_string = expr[i].first->expr_string(vars);
+		if ((expr[i].second->val != NULL && expr[i].second->val->value == 0) ||
+			(expr[i].second->val == NULL && expr[i].second->expr == "0"))
+			trans_string = "~" + trans_string;
 
-	// Convert var- to var:=0
-	if(chp.find(":=") == chp.npos && chp.find("-") != chp.npos)
-		chp = chp.substr(0, chp.find("-")) + ":=0";
+		stmts.push_back(dot_stmt());
+		stmts.back().stmt_type = "node";
+		stmts.back().node_ids.push_back(trans);
+		stmts.back().attr_list.attrs.push_back(dot_a_list());
+		stmts.back().attr_list.attrs.back().as.push_back(pair<string, string>("shape", "plaintext"));
+		stmts.back().attr_list.attrs.back().as.push_back(pair<string, string>("label", trans_string));
+		for (size_t j = 0; j < last.size(); j++)
+		{
+			stmts.push_back(dot_stmt());
+			stmts.back().stmt_type = "edge";
+			stmts.back().node_ids.push_back(last[j]);
+			stmts.back().node_ids.push_back(trans);
+		}
+
+		result.push_back(trans);
+	}
+
+	return result;
 }
 
-//Parse populates information about this assignment, such as
-//TODO go through
-void assignment::parse()
+void assignment::hide(variable_space &vars, vector<variable_index> uids)
 {
-	int middle;
-	sstring left_raw, right_raw;
-	int i, j;
-	int k, l;
-	sstring left, right;
-	variable *v;
-
-	flags->inc();
-	if (flags->log_base_hse())
-		(*flags->log_file) << flags->tab << "Assignment:\t" + chp << endl;
-
-	// Identify that this instruction is an assign.
-	if (chp.find(":=") != chp.npos)
+	for (size_t i = 0; i < expr.size();)
 	{
-		// Separate the two operands (the variable to be assigned and the value to assign)
-		middle = chp.find(":=");
-		left_raw = chp.substr(0, middle);
-		right_raw = chp.substr(middle+2);
-		for (i = left_raw.find_first_of(","), j = right_raw.find_first_of(","), k = 0, l = 0; i != left_raw.npos && j != right_raw.npos; i = left_raw.find_first_of(",", i+1), j = right_raw.find_first_of(",", j+1))
+		if (expr[i].first != NULL && find(uids.begin(), uids.end(), expr[i].first->var) != uids.end())
+			expr.erase(expr.begin() + i);
+		else
 		{
-			left = left_raw.substr(k, i-k);
-			right = right_raw.substr(l, j-l);
-			expr.push_back(pair<sstring, sstring>(left, right));
-			k = i+1;
-			l = j+1;
-
-			v = vars->find(left);
-			if (v != NULL)
-				v->driven = true;
+			if (expr[i].second != NULL)
+				expr[i].second->hide(vars, uids);
+			i++;
 		}
-		left = left_raw.substr(k);
-		right = right_raw.substr(l);
-		expr.push_back(pair<sstring, sstring>(left, right));
-
-		v = vars->find(left);
-		if (v != NULL)
-			v->driven = true;
 	}
-	// If all else fails, complain to the user.
+}
+
+void assignment::print(ostream &os, string newl)
+{
+	for (size_t i = 0; i < expr.size(); i++)
+	{
+		if (i != 0)
+			os << ",";
+
+		if (expr[i].first != NULL)
+			expr[i].first->print(os, newl);
+		else
+			os << "null";
+	}
+
+	if (expr.size() == 1 && expr[0].second != NULL && expr[0].second->val != NULL && expr[0].second->val->value == 0)
+		os << "-";
+	else if (expr.size() == 1 && expr[0].second != NULL && expr[0].second->val != NULL && expr[0].second->val->value == 1)
+		os << "+";
 	else
-		cerr << "Error: Instruction not handled: " << chp << endl;
-
-
-
-	flags->dec();
-}
-
-void assignment::simulate()
-{
-	vars->increment_pcs(canonical(), true);
-}
-
-void assignment::rewrite()
-{
-
-}
-
-void assignment::reorder()
-{
-
-}
-
-svector<petri_index> assignment::generate_states(petri_net *n, rule_space *p, svector<petri_index> f, smap<int, int> pbranch, smap<int, int> cbranch)
-{
-	list<pair<sstring, sstring> >::iterator ei, ej;
-	svector<petri_index> next, end;
-	svector<petri_index> allends;
-	int pbranch_id;
-	smap<int, int> npbranch;
-	variable *v;
-	int k;
-	int l;
-
-	if (flags->log_base_state_space())
-		(*flags->log_file) << flags->tab << "Assignment " << chp << endl;
-
-	net  = n;
-	prs = p;
-	from = f;
-
-	pbranch_id = net->pbranch_count;
-	net->pbranch_count++;
-	for (ei = expr.begin(), k = expr.size()-1; ei != expr.end(); ei++, k--)
 	{
-		v = vars->find(ei->first);
-		if (v != NULL)
+		os << ":=";
+
+		for (size_t i = 0; i < expr.size(); i++)
 		{
-			v->driven = true;
+			if (i != 0)
+				os << ",";
 
-			npbranch = pbranch;
-			if (expr.size() > 1)
-				npbranch.insert(pair<int, int>(pbranch_id, (int)k));
-
-			next.clear();
-			next = (k == 0 ? from : net->duplicate(from));
-			for (l = 0; l < (int)next.size(); l++)
-				net->at(next[l]).pbranch = npbranch;
-
-			end.clear();
-			end.push_back(net->push_transition(next, canonical(v->uid, (uint32_t)(ei->second == "1")), true, npbranch, cbranch, this));
-			allends.push_back(net->push_place(end, npbranch, cbranch, this));
+			if (expr[i].second != NULL)
+				expr[i].second->print(os, newl);
+			else
+				os << "null";
 		}
-		else
-			cerr << "Error: Undefined variable " << ei->first << "." << endl;
 	}
-	uid.push_back(net->push_transition(allends, pbranch, cbranch, this));
-
-	return uid;
 }
 
-void assignment::print_hse(sstring t, ostream *fout)
+ostream &operator<<(ostream &os, const assignment &a)
 {
-	if (expr.size() > 1)
-		(*fout) << "(";
-
-	list<pair<sstring, sstring> >::iterator i;
-	for (i = expr.begin(); i != expr.end(); i++)
+	for (size_t i = 0; i < a.expr.size(); i++)
 	{
-		if (i != expr.begin())
-			(*fout) << ",";
-		if (i->second == "0")
-			(*fout) << i->first << "-";
-		else if (i->second == "1")
-			(*fout) << i->first << "+";
+		if (i != 0)
+			os << ",";
+
+		if (a.expr[i].first != NULL)
+			os << (*a.expr[i].first);
+		else
+			os << "null";
 	}
 
-	if (expr.size() > 1)
-		(*fout) << ")";
+	if (a.expr.size() == 1 && a.expr[0].second != NULL && a.expr[0].second->val != NULL && a.expr[0].second->val->value == 0)
+		os << "-";
+	else if (a.expr.size() == 1 && a.expr[0].second != NULL && a.expr[0].second->val != NULL && a.expr[0].second->val->value == 1)
+		os << "+";
+	else
+	{
+		os << ":=";
+
+		for (size_t i = 0; i < a.expr.size(); i++)
+		{
+			if (i != 0)
+				os << ",";
+
+			if (a.expr[i].second != NULL)
+				os << (*a.expr[i].second);
+			else
+				os << "null";
+		}
+	}
+
+	return os;
 }

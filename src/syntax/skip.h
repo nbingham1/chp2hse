@@ -5,30 +5,24 @@
  *      Author: nbingham
  */
 
+#include "../instruction.h"
+
 #ifndef skip_h
 #define skip_h
-
-#include "instruction.h"
 
 struct skip : instruction
 {
 	skip();
-	skip(instruction *parent, sstring chp, variable_space *vars, flag_space *flags);
+	skip(tokenizer &tokens, type_space &types, variable_space &vars, instruction *parent);
+	skip(instruction *instr, tokenizer &tokens, variable_space &vars, instruction *parent, map<string, string> rename);
 	~skip();
 
-	canonical solution;
-
-	instruction *duplicate(instruction *parent, variable_space *vars, smap<sstring, sstring> convert);
-
-	void expand_shortcuts();
-	void parse();
-	void simulate();
-	void rewrite();
-	void reorder();
-	svector<petri_index> generate_states(petri_net *n, rule_space *p, svector<petri_index> f, smap<int, int> pbranch, smap<int, int> cbranch);
-
-	void print_hse(sstring t = "", ostream *fout = &cout);
+	static bool is_next(tokenizer &tokens, size_t i = 1);
+	void parse(tokenizer &tokens, type_space &types, variable_space &vars);
+	vector<dot_node_id> build_hse(variable_space &vars, vector<dot_stmt> &stmts, vector<dot_node_id> last, int &num_places, int &num_transitions);
+	void print(ostream &os = cout, string newl = "\n");
 };
 
+ostream &operator<<(ostream &os, const skip &s);
 
 #endif

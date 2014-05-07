@@ -5,31 +5,34 @@
  *      Author: nbingham
  */
 
-#include "instruction.h"
-#include "sequential.h"
-#include "guard.h"
+#include "composition.h"
+#include "expression.h"
+#include "variable_name.h"
 
 #ifndef control_h
 #define control_h
 
-enum control_type
-{
-	unknown = 0,
-	mutex = 1,
-	choice = 2
-};
-
 struct control : instruction
 {
 	control();
-	virtual ~control();
+	control(tokenizer &tokens, type_space &types, variable_space &vars, instruction *parent);
+	control(instruction *instr, tokenizer &tokens, variable_space &vars, instruction *parent, map<string, string> rename);
+	control(tokenizer &tokens, type_space &types, variable_space &vars, variable_name *left, expression *right);
+	~control();
 
-	control_type type;
-	list<pair<sequential*, guard*> > instrs;		//Guards index instructions
+	vector<pair<expression*, composition*> > terms;
+	bool loop;
+	bool mutex;
+	instruction *preface;
 
-	void clear();
-
-	pair<sstring, instruction*> expand_guard(sstring chp);
+	bool is_shortcut(tokenizer &tokens);
+	static bool is_next(tokenizer &tokens, size_t i = 1);
+	void parse(tokenizer &tokens, type_space &types, variable_space &vars);
+	vector<dot_node_id> build_hse(variable_space &vars, vector<dot_stmt> &stmts, vector<dot_node_id> last, int &num_places, int &num_transitions);
+	void hide(variable_space &vars, vector<variable_index> uids);
+	void print(ostream &os = cout, string newl = "\n");
 };
+
+ostream &operator<<(ostream &os, const control &c);
 
 #endif

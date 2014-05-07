@@ -1,10 +1,11 @@
 #include "channel.chp"
+#include "math.chp"
 
-inline process wchb(a4pe1of2 R, a4pe1of2 L)
+process wchb(a4pe1of2 R, a4pe1of2 L)
 {
 	*[
-		[	R.e & L.r.t -> R.r.t+; 
-		[]	R.e & L.r.f -> R.r.f+;
+		[	R.e & L.r.t -> R.r.t+
+		[]	R.e & L.r.f -> R.r.f+
 		]; L.e-; [~R.e & ~L.r.t & ~L.r.f]; (R.r.t- || R.r.f-); L.e+
 	]
 }
@@ -16,7 +17,7 @@ inline process wchb(a4pe1of2 R, a4pe1of2 L)
 	 ]
 }
 
-inline process pchb(a4pe1of2 R, a4pe1of2 L)
+process pchb(a4pe1of2 R, a4pe1of2 L)
 {
 	*[
 		[	R.e & L.r.t -> R.r.t+ 
@@ -32,7 +33,7 @@ inline process pchb(a4pe1of2 R, a4pe1of2 L)
 	 ]
 }
 
-inline process pchb_split(a4pe1of2 L, a4pe1of2 S, a4pe1of2 A, a4pe1of2 B)
+process pchb_split(a4pe1of2 L, a4pe1of2 S, a4pe1of2 A, a4pe1of2 B)
 {
 	node<1> en := 1;
 	*[(
@@ -61,7 +62,7 @@ inline process pchb_split(a4pe1of2 L, a4pe1of2 S, a4pe1of2 A, a4pe1of2 B)
 	 ]
 }
 
-/*inline process pchb_split(a4pe1of2 L, a4pe1of2 S, a4pe1of2 A, a4pe1of2 B)
+process pchb_split1(a4pe1of2 L, a4pe1of2 S, a4pe1of2 A, a4pe1of2 B)
 {
 	node<1> en := 1;
 	*[(
@@ -91,9 +92,9 @@ inline process pchb_split(a4pe1of2 L, a4pe1of2 S, a4pe1of2 A, a4pe1of2 B)
 	  []1 -> S.r.f+
 	  ]; [~S.e]; (S.r.t-||S.r.f-); [S.e]
 	 ]
-}*/
+}
 
-inline process pchb_FA(a4pe1of2 Ci, a4pe1of2 A, a4pe1of2 B, a4pe1of2 S, a4pe1of2 Co)
+process pchb_FA(a4pe1of2 Ci, a4pe1of2 A, a4pe1of2 B, a4pe1of2 S, a4pe1of2 Co)
 {
 	node<1> Fe := 1;
 	*[
@@ -133,7 +134,7 @@ inline process pchb_FA(a4pe1of2 Ci, a4pe1of2 A, a4pe1of2 B, a4pe1of2 S, a4pe1of2
 	 ]
 }
 
-inline process wchb_FA(a4pe1of2 Ci, a4pe1of2 A, a4pe1of2 B, a4pe1of2 S, a4pe1of2 Co)
+process wchb_FA(a4pe1of2 Ci, a4pe1of2 A, a4pe1of2 B, a4pe1of2 S, a4pe1of2 Co)
 {
 	node<1> Fe := 1;
 	*[
@@ -169,7 +170,7 @@ inline process wchb_FA(a4pe1of2 Ci, a4pe1of2 A, a4pe1of2 B, a4pe1of2 S, a4pe1of2
 	 ]
 }
 
-inline process pcfb_FA(a4pe1of2 Ci, a4pe1of2 A, a4pe1of2 B, a4pe1of2 S, a4pe1of2 Co)
+process pcfb_FA(a4pe1of2 Ci, a4pe1of2 A, a4pe1of2 B, a4pe1of2 S, a4pe1of2 Co)
 {
 	node<1> Fe := 1;
 	node<1> en := 1;
@@ -207,7 +208,7 @@ inline process pcfb_FA(a4pe1of2 Ci, a4pe1of2 A, a4pe1of2 B, a4pe1of2 S, a4pe1of2
 	 ]
 }
 
-inline process pcfb(a4pe1of2 R, a4pe1of2 L)
+process pcfb(a4pe1of2 R, a4pe1of2 L)
 {
 	node<1> en := 1;
 	*[
@@ -228,7 +229,7 @@ inline process pcfb(a4pe1of2 R, a4pe1of2 L)
 	 ]
 }
 
-/*inline process cmerge1b2(a4pa1of2 A, a4pa1of2 B, a4pa1of2 S, a4pa1of2 O)
+process cmerge1b2(a4pa1of2 A, a4pa1of2 B, a4pa1of2 S, a4pa1of2 O)
 {
 	dualrail s;
 	dualrail o;
@@ -239,95 +240,109 @@ inline process pcfb(a4pe1of2 R, a4pe1of2 L)
 		];
 		O!o
 	]
-}*/
+}
 
-inline process fifo0b(a4pa L, a4pa R)
+process fifo0b(a4pa L, a4pa R)
 {
 	*[L?;R!]
 }
 
-inline process fifo1b(a4pa1of2 L, a4pa1of2 R)
+process adder(a4pe1of2 L0, a4pe1of2 L1, a4pe1of2 R)
+{
+	*[R!(L0?^L1?)]
+}
+
+process fifo1b(a4pa1of2 L, a4pa1of2 R)
 {
 	dualrail i;
 	
 	*[L?i;R!i]
 }
 
-/*inline process fifo2b(achan4p2b L, achan4p2b R)
+/*process fifo2b(achan4p2b L, achan4p2b R)
 {
 	node<2> i;
 	
 	*[L?i;R!i]
 }*/
 
-inline process fork0b(a4pa L, a4pa R1, a4pa R2)
+process fork0b(a4pa L, a4pa R1, a4pa R2)
 {
 	*[L?;(R1!||R2!)]
 }
 
-inline process fork1b(a4pa1of2 L, a4pa1of2 R1, a4pa1of2 R2)
+process fork1b(a4pa1of2 L, a4pa1of2 R1, a4pa1of2 R2)
 {
 	dualrail val;
 	
 	*[L?val;(R1!val||R2!val)]
 }
 
-/*inline process fork2b(achan4p2b L, achan4p2b R1, achan4p2b R2)
+/*process fork2b(achan4p2b L, achan4p2b R1, achan4p2b R2)
 {
 	node<2> val;
 	
 	*[L?val;(R1!val||R2!val)]
 }*/
 
-/*inline process reg1b(p4pa1of2 R, a4pa1of2 W)
+process reg0b(p4pa R, a4pa W)
 {
-	node<1> val;
-
-	*[
-		[	#R -> R!val
-		|	#W -> W?val
+	*[	
+		[	#R -> R!
+		:	#W -> W?
 		]
 	]
 }
 
-inline process reg2b(pchan4p2b R, achan4p2b W)
+process reg1b(p4pa1of2 R, a4pa1of2 W)
+{
+	dualrail val;
+
+	*[	
+		[	#R -> R!val
+		:	#W -> W?val
+		]
+	]
+}
+
+/*process reg2b(pchan4p2b R, achan4p2b W)
 {
 	node<2> val;
 
 	*[
 		[	#R -> R!val
-		|	#W -> W?val
+		:	#W -> W?val
 		]
 	]
-}
+}*/
 
-inline process merge0b2(a4pa L1, a4pa L2, a4pa R)
+process merge0b2(a4pa L1, a4pa L2, a4pa R)
 {
 	*[
 		[	#L1 -> L1?
-		|	#L2 -> L2?
+		:	#L2 -> L2?
 		]; R!
 	]
 }
 
-inline process merge1b2(a4pa1of2 L1, a4pa1of2 L2, a4pa1of2 R)
+process merge1b2(a4pa1of2 L1, a4pa1of2 L2, a4pa1of2 R)
 {
-	node<1> val;
+	dualrail val;
 
 	*[
 		[	#L1 -> L1?val
-		|	#L2 -> L2?val
+		:	#L2 -> L2?val
 		]; R!val
 	]
 }
 
-inline process merge2b2(achan4p2b L1, achan4p2b L2, achan4p2b R)
+/*process merge2b2(a4pa1of2 L1, a4pa1of2 L2, a4pa1of2 R)
 {
 	node<2> val;
 	
 	*[
 		[	#L1 -> L1?val
-		|	#L2 -> L2?val
+		:	#L2 -> L2?val
 		]; R!val
 	]
 }*/

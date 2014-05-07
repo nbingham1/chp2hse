@@ -5,7 +5,7 @@
  *      Author: nbingham
  */
 
-#include "instruction.h"
+#include "expression.h"
 
 #ifndef debug_h
 #define debug_h
@@ -29,22 +29,20 @@
 struct debug : instruction
 {
 	debug();
-	debug(instruction *parent, sstring chp, variable_space *vars, flag_space *flags);
+	debug(tokenizer &tokens, type_space &types, variable_space &vars, instruction *parent);
+	debug(instruction *instr, tokenizer &tokens, variable_space &vars, instruction *parent, map<string, string> rename);
 	~debug();
 
-	sstring type;
+	string type;
+	expression *expr;
 
-	instruction *duplicate(instruction *parent, variable_space *vars, smap<sstring, sstring> convert);
-
-	void expand_shortcuts();
-	void parse();
-	void simulate();
-	void rewrite();
-	void reorder();
-	svector<petri_index> generate_states(petri_net *n, rule_space *p, svector<petri_index> f, smap<int, int> pbranch, smap<int, int> cbranch);
-	void generate_class_requirements();
-
-	void print_hse(sstring t, ostream *fout = &cout);
+	static bool is_next(tokenizer &tokens, size_t i = 1);
+	void parse(tokenizer &tokens, type_space &types, variable_space &vars);
+	vector<dot_node_id> build_hse(variable_space &vars, vector<dot_stmt> &stmts, vector<dot_node_id> last, int &num_places, int &num_transitions);
+	void hide(variable_space &vars, vector<variable_index> uids);
+	void print(ostream &os = cout, string newl = "\n");
 };
+
+ostream &operator<<(ostream &os, const debug &d);
 
 #endif

@@ -1,6 +1,6 @@
 #include "common.h"
 
-/*Is this character a legal name starter character?
+/** Returns true if 'c' has a value that is legal for the first character in a name.
  */
 bool ac(char c)
 {
@@ -9,19 +9,17 @@ bool ac(char c)
 }
 
 
-/* Is this character a character that is legal to have
- * in a type name or variable name? a-z A-Z 0-9 _
+/** Returns true if 'c' has a value that is legal in a type or variable name.
  */
 bool nc(char c)
 {
 	return ((c >= 'a' && c <= 'z') ||
 			(c >= 'A' && c <= 'Z') ||
 			(c >= '0' && c <= '9') ||
-			(c == '_'));
+			(c == '_') || (c == '.'));
 }
 
-/* Is this character an operator?
- *
+/** Returns true if 'c' is an operator character.
  */
 bool oc(char c)
 {
@@ -45,11 +43,11 @@ bool oc(char c)
 			c == '!' ||
 			c == '?' ||
 			c == '@' ||
-			c == '#');
+			c == '#' ||
+			c == '/');
 }
 
-/* Is this character whitespace?
- *
+/** Returns true if 'c' is a whitespace character
  */
 bool sc(char c)
 {
@@ -61,11 +59,11 @@ bool sc(char c)
 
 // BIG ENDIAN
 
-int hex_to_int(sstring str)
+int hex_to_int(string str)
 {
 	int result = 0;
 	int mul = 1;
-	sstring::reverse_iterator i;
+	string::reverse_iterator i;
 
 	for (i = str.rbegin(), mul = 1; i != str.rend(); i++, mul *= 16)
 	{
@@ -100,10 +98,10 @@ int hex_to_int(sstring str)
 	return result;
 }
 
-sstring hex_to_bin(sstring str)
+string hex_to_bin(string str)
 {
-	sstring result = "";
-	sstring::iterator i;
+	string result = "";
+	string::iterator i;
 
 	for (i = str.begin(); i != str.end(); i++)
 	{
@@ -138,11 +136,11 @@ sstring hex_to_bin(sstring str)
 	return result;
 }
 
-int dec_to_int(sstring str)
+int dec_to_int(string str)
 {
 	int result = 0;
 	int mul = 1;
-	sstring::reverse_iterator i;
+	string::reverse_iterator i;
 
 	for (i = str.rbegin(), mul = 1; i != str.rend(); i++, mul *= 10)
 	{
@@ -165,9 +163,28 @@ int dec_to_int(sstring str)
 	return result;
 }
 
-sstring int_to_bin(int dec)
+int bin_to_int(string str)
 {
-	sstring result = "";
+	int result = 0;
+	int mul = 1;
+	string::reverse_iterator i;
+
+	for (i = str.rbegin(), mul = 1; i != str.rend(); i++, mul *= 2)
+	{
+		switch (*i)
+		{
+		case '0': result += 0; break;
+		case '1': result += mul; break;
+		default:  return 0;
+		}
+	}
+
+	return result;
+}
+
+string int_to_bin(int dec)
+{
+	string result = "";
 	int i = 0;
 
 	if (dec == 0)
@@ -188,7 +205,7 @@ sstring int_to_bin(int dec)
 	return result;
 }
 
-sstring dec_to_bin(sstring str)
+string dec_to_bin(string str)
 {
 	return int_to_bin(dec_to_int(str));
 }
@@ -227,6 +244,31 @@ int powi(int base, int exp)
     return result;
 }
 
+int log2i(unsigned long long value)
+{
+  static const unsigned long long t[6] = {
+    0xFFFFFFFF00000000ull,
+    0x00000000FFFF0000ull,
+    0x000000000000FF00ull,
+    0x00000000000000F0ull,
+    0x000000000000000Cull,
+    0x0000000000000002ull
+  };
+
+  int y = (((value & (value - 1)) == 0) ? 0 : 1);
+  int j = 32;
+  int i;
+
+  for (i = 0; i < 6; i++) {
+    int k = (((value & t[i]) == 0) ? 0 : j);
+    y += k;
+    value >>= k;
+    j >>= 1;
+  }
+
+  return y;
+}
+
 uint32_t bitwise_or(uint32_t a, uint32_t b)
 {
 	return a||b;
@@ -240,27 +282,4 @@ uint32_t bitwise_and(uint32_t a, uint32_t b)
 uint32_t bitwise_not(uint32_t a)
 {
 	return !a;
-}
-
-svector<int> first_combination(int s)
-{
-	svector<int> result;
-	for (int i = 0; i < s; i++)
-		result.push_back(i);
-	return result;
-}
-
-bool next_combination(int S, svector<int> *iter)
-{
-	for (int i = 1; i <= iter->size(); i++)
-	{
-		if ((*iter)[iter->size()-i] < S-i)
-		{
-			(*iter)[iter->size()-i]++;
-			for (int j = iter->size()-i+1; j < iter->size(); j++)
-				(*iter)[j] = (*iter)[j-1]+1;
-			return true;
-		}
-	}
-	return false;
 }

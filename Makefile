@@ -1,13 +1,10 @@
-CXXFLAGS	= -O2 -g -Wall -fmessage-length=0 -std=c++0x
+CXXFLAGS =	-O2 -g -Wall -fmessage-length=0
 
-OBJS	= src/data/canonical.o src/data/minterm.o src/data/path_space.o src/data/path.o src/data/petri.o src/data/program_counter.o src/data/variable_space.o src/data/variable.o \
-		  src/syntax/assignment.o src/syntax/composition.o src/syntax/condition.o src/syntax/control.o src/syntax/debug.o src/syntax/guard.o src/syntax/instruction.o src/syntax/loop.o src/syntax/parallel.o src/syntax/rule_space.o src/syntax/rule.o src/syntax/sequential.o src/syntax/skip.o \
-		  src/type/channel.o src/type/keyword.o src/type/operator.o src/type/process.o src/type/record.o \
-		  src/chp.o src/common.o src/flag_space.o src/program.o src/utility.o \
+OBJS =		src/chp.o src/common.o src/instruction.o src/keyword.o src/message.o src/program.o src/preprocessor.o src/syntax/assignment.o src/syntax/channel.o src/syntax/composition.o src/syntax/constant.o src/syntax/control.o src/syntax/dot.o src/syntax/expression.o src/syntax/debug.o src/syntax/declaration.o src/syntax/variable_name.o src/syntax/type_name.o src/syntax/operator.o src/syntax/process.o src/syntax/record.o src/syntax/skip.o src/syntax/slice.o src/tokenizer.o src/syntax/instance.o src/variable_space.o src/variable.o
 
-LIBS	=
+LIBS =
 
-TARGET	= haystack
+TARGET =	chp2hse
 
 $(TARGET):	$(OBJS)
 	$(CXX) -o $(TARGET) $(OBJS) $(LIBS)

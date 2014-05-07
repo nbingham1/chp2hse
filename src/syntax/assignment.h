@@ -1,35 +1,35 @@
 /*
  * assignment.h
  *
- * An assignment is a basic CHP syntax of the form variable:=value, often shorthanded
- * with variable+ for assignment to 1 and variable- for assignment to 0.
- * The assignment structure contains a uid indicating the statespace state it affects,
- * as well as a list of simultaneous assignments (expression variable pairs).
+ *  Created on: Apr 8, 2014
+ *      Author: nbingham
  */
+
+#include "../instruction.h"
+#include "variable_name.h"
+#include "expression.h"
 
 #ifndef assignment_h
 #define assignment_h
 
-#include "instruction.h"
-
 struct assignment : instruction
 {
 	assignment();
-	assignment(instruction *parent, sstring chp, variable_space *vars, flag_space *flags);
+	assignment(tokenizer &tokens, type_space &types, variable_space &vars, instruction *parent);
+	assignment(instruction *instr, tokenizer &tokens, variable_space &vars, instruction *parent, map<string, string> rename);
+	assignment(tokenizer &tokens, type_space &types, variable_space &vars, int count, ...);
 	~assignment();
 
-	list<pair<sstring, sstring> > expr;
+	vector<pair<variable_name*, expression*> > expr;
+	instruction *preface;
 
-	instruction *duplicate(instruction *parent, variable_space *vars, smap<sstring, sstring> convert);
-
-	void expand_shortcuts();
-	void parse();
-	void simulate();
-	void rewrite();
-	void reorder();
-	svector<petri_index> generate_states(petri_net *n, rule_space *p, svector<petri_index> f, smap<int, int> pbranch, smap<int, int> cbranch);
-
-	void print_hse(sstring t = "", ostream *fout = &cout);
+	static bool is_next(tokenizer &tokens, size_t i = 1);
+	void parse(tokenizer &tokens, type_space &types, variable_space &vars);
+	vector<dot_node_id> build_hse(variable_space &vars, vector<dot_stmt> &stmts, vector<dot_node_id> last, int &num_places, int &num_transitions);
+	void hide(variable_space &vars, vector<variable_index> uids);
+	void print(ostream &os = cout, string newl = "\n");
 };
+
+ostream &operator<<(ostream &os, const assignment &a);
 
 #endif

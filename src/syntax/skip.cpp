@@ -5,88 +5,84 @@
  *      Author: nbingham
  */
 
-#include "../common.h"
-#include "../utility.h"
-#include "../type.h"
-#include "../data.h"
-
 #include "skip.h"
-#include "assignment.h"
+#include "../message.h"
 
 skip::skip()
 {
-	_kind = "skip";
+	this->_kind = "skip";
 }
 
-skip::skip(instruction *parent, sstring chp, variable_space *vars, flag_space *flags)
+skip::skip(tokenizer &tokens, type_space &types, variable_space &vars, instruction *parent)
 {
 	this->_kind		= "skip";
-	this->chp		= chp;
-	this->flags 	= flags;
-	this->vars		= vars;
 	this->parent	= parent;
+
+	parse(tokens, types, vars);
+}
+
+skip::skip(instruction *instr, tokenizer &tokens, variable_space &vars, instruction *parent, map<string, string> rename)
+{
+	this->_kind = "skip";
+
+	if (instr == NULL)
+		internal(tokens, "attempting to copy a '" + kind() + "' from a null instruction pointer", __FILE__, __LINE__);
+	else if (instr->kind() != kind())
+		internal(tokens, "attempting to copy a '" + kind() + "' from a '" + instr->kind() + "' pointer", __FILE__, __LINE__);
+	else
+	{
+
+	}
 }
 
 skip::~skip()
 {
-	_kind = "skip";
 }
 
-/* This copies a skip to another process and replaces
- * all of the specified variables.
- */
-instruction *skip::duplicate(instruction *parent, variable_space *vars, smap<sstring, sstring> convert)
+bool skip::is_next(tokenizer &tokens, size_t i)
 {
-	skip *instr;
-
-	instr 				= new skip();
-	instr->chp			= this->chp;
-	instr->vars			= vars;
-	instr->flags		= flags;
-	instr->parent		= parent;
-
-	return instr;
+	return (tokens.peek(i) == "skip");
 }
 
-void skip::expand_shortcuts()
+void skip::parse(tokenizer &tokens, type_space &types, variable_space &vars)
 {
+	start_token = tokens.index+1;
+
+	tokens.increment();
+	tokens.push_expected("skip");
+	tokens.syntax(__FILE__, __LINE__);
+	tokens.decrement();
+
+	end_token = tokens.index;
 }
 
-void skip::parse()
+vector<dot_node_id> skip::build_hse(variable_space &vars, vector<dot_stmt> &stmts, vector<dot_node_id> last, int &num_places, int &num_transitions)
 {
+	dot_node_id trans("T" + to_string(num_transitions++));
+	stmts.push_back(dot_stmt());
+	stmts.back().stmt_type = "node";
+	stmts.back().node_ids.push_back(trans);
+	stmts.back().attr_list.attrs.push_back(dot_a_list());
+	stmts.back().attr_list.attrs.back().as.push_back(pair<string, string>("shape", "plaintext"));
+	stmts.back().attr_list.attrs.back().as.push_back(pair<string, string>("label", "1"));
+	for (size_t j = 0; j < last.size(); j++)
+	{
+		stmts.push_back(dot_stmt());
+		stmts.back().stmt_type = "edge";
+		stmts.back().node_ids.push_back(last[j]);
+		stmts.back().node_ids.push_back(trans);
+	}
+
+	return vector<dot_node_id>(1, trans);
 }
 
-void skip::simulate()
+void skip::print(ostream &os, string newl)
 {
-
+	os << "skip";
 }
 
-void skip::rewrite()
+ostream &operator<<(ostream &os, const skip &s)
 {
-}
-
-void skip::reorder()
-{
-
-}
-
-svector<petri_index> skip::generate_states(petri_net *n, rule_space *p, svector<petri_index> f, smap<int, int> pbranch, smap<int, int> cbranch)
-{
-	flags->inc();
-	from = f;
-	prs = p;
-	net = n;
-
-	if (flags->log_base_state_space())
-		(*flags->log_file) << flags->tab << "Skip " << endl;
-
-	uid.push_back(net->push_transition(from, pbranch, cbranch, this));
-	flags->dec();
-
-	return uid;
-}
-
-void skip::print_hse(sstring t, ostream *fout)
-{
-	(*fout) << chp;
+	os << "skip";
+	return os;
 }

@@ -5,153 +5,140 @@
  *      Author: nbingham
  */
 
-#include "../common.h"
-#include "../utility.h"
-#include "../type.h"
-#include "../data.h"
-
 #include "debug.h"
+#include "../message.h"
 
 debug::debug()
 {
-	_kind = "debug";
+	this->_kind = "debug";
+	this->parent = NULL;
+	this->expr = NULL;
 }
 
-debug::debug(instruction *parent, sstring chp, variable_space *vars, flag_space *flags)
+debug::debug(tokenizer &tokens, type_space &types, variable_space &vars, instruction *parent)
 {
-	_kind = "debug";
-
-	this->chp = chp;
-	this->flags = flags;
-	this->vars = vars;
+	this->_kind = "debug";
 	this->parent = parent;
+	this->expr = NULL;
 
-	expand_shortcuts();
-	parse();
+	parse(tokens, types, vars);
+}
+
+debug::debug(instruction *instr, tokenizer &tokens, variable_space &vars, instruction *parent, map<string, string> rename)
+{
+	this->_kind = "debug";
+	this->parent = NULL;
+	this->expr = NULL;
+
+	if (instr == NULL)
+		internal(tokens, "attempting to copy a '" + kind() + "' from a null instruction pointer", __FILE__, __LINE__);
+	else if (instr->kind() != kind())
+		internal(tokens, "attempting to copy a '" + kind() + "' from a '" + instr->kind() + "' pointer", __FILE__, __LINE__);
+	else
+	{
+		debug *source = (debug*)instr;
+		this->parent = parent;
+		this->type = source->type;
+		this->expr = new expression(source->expr, tokens, vars, this, rename);
+	}
 }
 
 debug::~debug()
 {
-	_kind = "debug";
+	if (expr != NULL)
+		delete expr;
+	expr = NULL;
 }
 
-instruction *debug::duplicate(instruction *parent, variable_space *vars, smap<sstring, sstring> convert)
+bool debug::is_next(tokenizer &tokens, size_t i)
 {
-	debug *instr;
+	string token = tokens.peek(i);
+	if (token == "{" || token == "assert" || token == "assume" || token == "enforce" || token == "require")
+		return true;
 
-	instr 				= new debug();
-	instr->chp			= this->chp;
-	instr->vars			= vars;
-	instr->flags		= flags;
-	instr->parent		= parent;
-	instr->type			= type;
+	return false;
+}
 
-	int idx;
-	sstring rep;
+void debug::parse(tokenizer &tokens, type_space &types, variable_space &vars)
+{
+	start_token = tokens.index+1;
 
-	smap<sstring, sstring>::iterator i, j;
-	int k = 0, min, curr;
-	while (k != instr->chp.npos)
+	if (tokens.peek_next() == "{")
+		type = "assert";
+	else
 	{
-		j = convert.end();
-		min = instr->chp.length();
-		curr = 0;
-		for (i = convert.begin(); i != convert.end(); i++)
-		{
-			curr = find_name(instr->chp, i->first, k);
-			if (curr < min && curr >= 0)
-			{
-				min = curr;
-				j = i;
-			}
-		}
-
-		if (j != convert.end())
-		{
-			rep = j->second;
-			instr->chp.replace(min, j->first.length(), rep);
-			if (instr->chp[min + rep.length()] == '[' && instr->chp[min + rep.length()-1] == ']')
-			{
-				idx = instr->chp.find_first_of("]", min + rep.length()) + 1;
-				rep = flatten_slice(instr->chp.substr(min, idx - min));
-				instr->chp.replace(min, idx - min, rep);
-			}
-
-			k = min + rep.length();
-		}
-		else
-			k = instr->chp.npos;
+		tokens.increment();
+		tokens.push_expected("assert");
+		tokens.push_expected("assume");
+		tokens.push_expected("enforce");
+		tokens.push_expected("require");
+		tokens.push_bound("{");
+		type = tokens.syntax(__FILE__, __LINE__);
+		tokens.decrement();
 	}
 
-	instr->chp = canonical(instr->chp, vars).print(vars);
+	tokens.increment();
+	tokens.push_expected("{");
+	tokens.syntax(__FILE__, __LINE__);
+	tokens.decrement();
 
-	return instr;
+	tokens.increment();
+	tokens.push_bound("}");
+	expr = new expression(tokens, types, vars, this);
+	tokens.decrement();
+
+	tokens.increment();
+	tokens.push_expected("}");
+	tokens.syntax(__FILE__, __LINE__);
+	tokens.decrement();
+
+	end_token = tokens.index;
 }
 
-void debug::expand_shortcuts()
+vector<dot_node_id> debug::build_hse(variable_space &vars, vector<dot_stmt> &stmts, vector<dot_node_id> last, int &num_places, int &num_transitions)
 {
-	if (chp[0] == '{')
-		chp = "assert" + chp;
+	dot_node_id trans("T" + to_string(num_transitions++));
+	stmts.push_back(dot_stmt());
+	stmts.back().stmt_type = "node";
+	stmts.back().node_ids.push_back(trans);
+	stmts.back().attr_list.attrs.push_back(dot_a_list());
+	stmts.back().attr_list.attrs.back().as.push_back(pair<string, string>("shape", "plaintext"));
+	stmts.back().attr_list.attrs.back().as.push_back(pair<string, string>("label", "1"));
+	for (size_t j = 0; j < last.size(); j++)
+	{
+		stmts.push_back(dot_stmt());
+		stmts.back().stmt_type = "edge";
+		stmts.back().node_ids.push_back(last[j]);
+		stmts.back().node_ids.push_back(trans);
+	}
+
+	return vector<dot_node_id>(1, trans);
 }
 
-void debug::parse()
+void debug::hide(variable_space &vars, vector<variable_index> uids)
 {
-	int open = chp.find_first_of("{");
-	int close = chp.find_first_of("}");
-
-	type = chp.substr(0, open);
-	chp = chp.substr(open+1, close - open - 1);
-
-	if (type != "assert" && type != "require" && type != "assume" && type != "enforce")
-		cerr << "Error: illegal debug function " << type << "." << endl;
+	if (expr != NULL)
+		expr->hide(vars, uids);
 }
 
-void debug::simulate()
+void debug::print(ostream &os, string newl)
 {
-
-}
-
-void debug::rewrite()
-{
-
-}
-
-void debug::reorder()
-{
-
-}
-
-svector<petri_index> debug::generate_states(petri_net *n, rule_space *p, svector<petri_index> f, smap<int, int> pbranch, smap<int, int> cbranch)
-{
-	net = n;
-	prs = p;
-	from = f;
-
-	if (type == "assert")
-		for (int i = 0; i < (int)f.size(); i++)
-			(*n)[f[i]].assertions.push_back(canonical("~(" + chp + ")", vars));
-	else if (type == "require")
-		vars->requirements.push_back(canonical("~(" + chp + ")", vars));
-	else if (type == "assume")
-		for (int i = 0; i < (int)f.size(); i++)
-			(*n)[f[i]].assumptions = (*n)[f[i]].assumptions >> canonical(chp, vars);
-	else if (type == "enforce")
-		vars->enforcements = vars->enforcements >> canonical(chp, vars);
-
-	return f;
-}
-
-void debug::generate_class_requirements()
-{
-	if (type == "require")
-		vars->requirements.push_back(canonical("~(" + chp + ")", vars));
-	else if (type == "enforce")
-		vars->enforcements = vars->enforcements >> canonical(chp, vars);
+	os << type << "{";
+	if (expr != NULL)
+		expr->print(os, newl);
 	else
-		cerr << "Error: Illegal debug function type " << type << "." << endl;
+		os << "null";
+	os << "}";
 }
 
-void debug::print_hse(sstring t, ostream *fout)
+ostream &operator<<(ostream &os, const debug &d)
 {
-	(*fout) << type << "{" << chp << "}";
+	os << d.type << "{";
+	if (d.expr != NULL)
+		os << *d.expr;
+	else
+		os << "null";
+	os << "}";
+
+	return os;
 }

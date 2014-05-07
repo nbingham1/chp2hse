@@ -1,185 +1,403 @@
 /*
  * composition.cpp
  *
- *  Created on: Jul 16, 2013
- *      Author: nbingham
+ *  Created on: Nov 1, 2012
+ *      Author: Ned Bingham and Nicholas Kramer
+ *
+ *  DO NOT DISTRIBUTE
  */
 
 #include "composition.h"
-#include "parallel.h"
-#include "sequential.h"
+#include "skip.h"
+#include "control.h"
+#include "debug.h"
 #include "assignment.h"
-#include "condition.h"
-#include "loop.h"
+#include "declaration.h"
+#include "../message.h"
 
 composition::composition()
 {
-	parent = NULL;
-	vars = NULL;
-	net = NULL;
-	chp = "";
-	_kind = "composition";
-	flags = NULL;
+	this->_kind = "composition";
+}
+
+composition::composition(tokenizer &tokens, type_space &types, variable_space &vars, instruction *parent, size_t i)
+{
+	this->_kind = "composition";
+	this->parent = parent;
+
+	parse(tokens, types, vars, i);
+}
+
+composition::composition(instruction *instr, tokenizer &tokens, variable_space &vars, instruction *parent, map<string, string> rename)
+{
+	this->_kind = "composition";
+
+	if (instr == NULL)
+		internal(tokens, "attempting to copy a '" + kind() + "' from a null instruction pointer", __FILE__, __LINE__);
+	else if (instr->kind() != kind())
+		internal(tokens, "attempting to copy a '" + kind() + "' from a '" + instr->kind() + "' pointer", __FILE__, __LINE__);
+	else
+	{
+		composition *source = (composition*)instr;
+		this->parent = parent;
+		this->operators = source->operators;
+		for (size_t i = 0; i < source->terms.size(); i++)
+		{
+			if (source->terms[i] != NULL)
+			{
+				if (source->terms[i]->kind() == "composition")
+					this->terms.push_back(new composition(source->terms[i], tokens, vars, this, rename));
+				else if (source->terms[i]->kind() == "skip")
+					this->terms.push_back(new skip(source->terms[i], tokens, vars, this, rename));
+				else if (source->terms[i]->kind() == "control")
+					this->terms.push_back(new control(source->terms[i], tokens, vars, this, rename));
+				else if (source->terms[i]->kind() == "debug")
+					this->terms.push_back(new debug(source->terms[i], tokens, vars, this, rename));
+				else if (source->terms[i]->kind() == "declaration")
+					this->terms.push_back(new declaration(source->terms[i], tokens, vars, this, rename));
+				else if (source->terms[i]->kind() == "assignment")
+					this->terms.push_back(new assignment(source->terms[i], tokens, vars, this, rename));
+			}
+			else
+				this->terms.push_back(NULL);
+		}
+	}
+}
+
+composition::composition(tokenizer &tokens, type_space &types, variable_space &vars, string op, int count, ...)
+{
+	this->_kind = "composition";
+	this->parent = NULL;
+
+	va_list args;
+	va_start(args, count);
+	for (int i = 0; i < count; i++)
+	{
+		if (i != 0)
+			operators.push_back(op);
+		terms.push_back((instruction*)va_arg(args, instruction*));
+	}
+	va_end(args);
+}
+
+composition::composition(tokenizer &tokens, type_space &types, variable_space &vars, string op, vector<instruction*> terms)
+{
+	this->_kind = "composition";
+	this->parent = NULL;
+	this->terms = terms;
+
+	for (size_t i = 0; i < terms.size()-1; i++)
+		operators.push_back(op);
 }
 
 composition::~composition()
 {
-	parent = NULL;
-	vars = NULL;
-	net = NULL;
-	chp = "";
-	_kind = "composition";
-	flags = NULL;
-
-	list<instruction*>::iterator j;
-	for (j = instrs.begin(); j != instrs.end(); j++)
-	{
-		if (*j != NULL)
-			delete *j;
-		*j = NULL;
-	}
-
-	instrs.clear();
+	for (vector<instruction*>::iterator term = terms.begin(); term != terms.end(); term++)
+		delete (*term);
+	terms.clear();
 }
 
-void composition::init(sstring chp, variable_space *vars, flag_space *flags)
+void composition::parse(tokenizer &tokens, type_space &types, variable_space &vars)
 {
-	clear();
-
-	this->chp = chp;
-	this->flags = flags;
-	this->vars = vars;
-
-	expand_shortcuts();
-	parse();
+	parse(tokens, types, vars, 0);
 }
 
-void composition::clear()
+void composition::parse(tokenizer &tokens, type_space &types, variable_space &vars, size_t i)
 {
-	chp = "";
+	start_token = tokens.index+1;
 
-	list<instruction*>::iterator j;
-	for (j = instrs.begin(); j != instrs.end(); j++)
+	bool done = false;
+	while (!done)
 	{
-		if (*j != NULL)
-			delete *j;
-		*j = NULL;
-	}
-
-	instrs.clear();
-}
-
-instruction *composition::expand_assignment(sstring chp)
-{
-	parallel *p = new parallel(this, "", vars, flags);
-	assignment *a = new assignment(p, chp, vars, flags);
-	pair<sstring, instruction*> result;
-	list<pair<sstring, sstring> >::iterator i;
-	list<pair<sstring, sstring> > remove;
-	variable *v;
-
-	for (i = a->expr.begin(); i != a->expr.end(); i++)
-	{
-		v = vars->find(i->second);
-		if (i->second.find_first_of("&|~^=<>/+-*?#()") != i->second.npos)
+		tokens.increment();
+		tokens.push_bound(tokens.compositions[i]);
+		if (i < tokens.compositions.size()-1)
+			terms.push_back(new composition(tokens, types, vars, this, i+1));
+		else
 		{
-			result = expand_expression(i->second, i->first);
-			i->second = result.first;
-			if (result.second != NULL)
+			tokens.increment();
+			tokens.push_expected("(");
+			tokens.push_expected("[skip]");
+			tokens.push_expected("[conditional]");
+			tokens.push_expected("[debug]");
+			tokens.push_expected("[declaration]");
+			tokens.push_expected("[assignment]");
+			string token = tokens.syntax(__FILE__, __LINE__);
+			tokens.decrement();
+
+			if (token == "(")
 			{
-				result.second->parent = p;
-				p->push(result.second);
+				tokens.increment();
+				tokens.push_bound(")");
+				terms.push_back(new composition(tokens, types, vars, this));
+				tokens.decrement();
+
+				tokens.increment();
+				tokens.push_expected(")");
+				tokens.syntax(__FILE__, __LINE__);
+				tokens.decrement();
 			}
-			remove.push_back(*i);
+			else if (skip::is_next(tokens))
+				terms.push_back(new skip(tokens, types, vars, this));
+			else if (control::is_next(tokens))
+			{
+				control *temp = new control(tokens, types, vars, this);
+				if (temp->preface == NULL)
+					terms.push_back(temp);
+				else
+				{
+					terms.push_back(new composition());
+					terms.back()->parent = this;
+					((composition*)terms.back())->operators.push_back(";");
+					((composition*)terms.back())->terms.push_back(temp->preface);
+					temp->preface->parent = terms.back();
+					temp->preface = NULL;
+					((composition*)terms.back())->terms.push_back(temp);
+				}
+
+			}
+			else if (debug::is_next(tokens))
+				terms.push_back(new debug(tokens, types, vars, this));
+			else if (declaration::is_next(tokens))
+			{
+				declaration temp(tokens, types, vars, this);
+				if (temp.preface != NULL)
+				{
+					temp.preface->parent = this;
+					terms.push_back(temp.preface);
+					temp.preface = NULL;
+				}
+				else
+				{
+					terms.push_back(new skip());
+					terms.back()->parent = this;
+				}
+			}
+			else if (assignment::is_next(tokens))
+			{
+				assignment temp(tokens, types, vars, this);
+				if (temp.preface != NULL)
+				{
+					temp.preface->parent = this;
+					terms.push_back(temp.preface);
+					temp.preface = NULL;
+				}
+				else
+				{
+					terms.push_back(new skip());
+					terms.back()->parent = this;
+				}
+			}
 		}
-		else if (v != NULL)
+		tokens.decrement();
+
+		if (find(tokens.compositions[i].begin(), tokens.compositions[i].end(), tokens.peek_next()) != tokens.compositions[i].end())
+			operators.push_back(tokens.next());
+		else if (tokens.in_bound(1) != tokens.bound.end())
+			done = true;
+		else
 		{
-			p->push(new condition(p, "[" + i->second + "->" + i->first + "+[]~" + i->second + "->" + i->first + "-]", vars, flags));
-			remove.push_back(*i);
+			tokens.increment();
+			tokens.push_expected(tokens.compositions[i]);
+			string token = tokens.syntax(__FILE__, __LINE__);
+			tokens.decrement();
+
+			if (find(tokens.compositions[i].begin(), tokens.compositions[i].end(), token) != tokens.compositions[i].end())
+				operators.push_back(token);
+			else
+				done = true;
 		}
 	}
 
-	for (i = remove.begin(); i != remove.end(); i++)
-		a->expr.remove(*i);
+	end_token = tokens.index;
+}
 
-	if (p->instrs.size() == 0)
+vector<dot_node_id> composition::build_hse(variable_space &vars, vector<dot_stmt> &stmts, vector<dot_node_id> last, int &num_places, int &num_transitions)
+{
+	vector<dot_node_id> result;
+	vector<dot_node_id> prev = last;
+	vector<dot_node_id> next;
+	if (operators.size() > 0 && (operators.front() == "||" || operators.front() == ","))
 	{
-		delete p;
-		a->parent = this;
-		return a;
+		dot_node_id trans("T" + to_string(num_transitions++));
+		stmts.push_back(dot_stmt());
+		stmts.back().stmt_type = "node";
+		stmts.back().node_ids.push_back(trans);
+		stmts.back().attr_list.attrs.push_back(dot_a_list());
+		stmts.back().attr_list.attrs.back().as.push_back(pair<string, string>("shape", "plaintext"));
+		stmts.back().attr_list.attrs.back().as.push_back(pair<string, string>("label", "1"));
+		for (size_t j = 0; j < prev.size(); j++)
+		{
+			stmts.push_back(dot_stmt());
+			stmts.back().stmt_type = "edge";
+			stmts.back().node_ids.push_back(prev[j]);
+			stmts.back().node_ids.push_back(trans);
+		}
+
+		last = vector<dot_node_id>(1, trans);
 	}
 
-	if (a->expr.size() > 0)
-		p->push(a);
+	for (size_t i = 0; (i == 0 || i-1 < operators.size()) && i < terms.size(); i++)
+	{
+		if (i != 0 && operators[i-1] == ";")
+		{
+			dot_node_id semi("S" + to_string(num_places++));
+			stmts.push_back(dot_stmt());
+			stmts.back().stmt_type = "node";
+			stmts.back().node_ids.push_back(semi);
+			stmts.back().attr_list.attrs.push_back(dot_a_list());
+			stmts.back().attr_list.attrs.back().as.push_back(pair<string, string>("shape", "circle"));
+			stmts.back().attr_list.attrs.back().as.push_back(pair<string, string>("width", "0.25"));
+			stmts.back().attr_list.attrs.back().as.push_back(pair<string, string>("label", ""));
+			for (size_t j = 0; j < next.size(); j++)
+			{
+				stmts.push_back(dot_stmt());
+				stmts.back().stmt_type = "edge";
+				stmts.back().node_ids.push_back(next[j]);
+				stmts.back().node_ids.push_back(semi);
+			}
+
+			prev = vector<dot_node_id>(1, semi);
+		}
+		else if (i != 0 && (operators[i-1] == "||" || operators[i-1] == ","))
+		{
+			dot_node_id semi("S" + to_string(num_places++));
+			stmts.push_back(dot_stmt());
+			stmts.back().stmt_type = "node";
+			stmts.back().node_ids.push_back(semi);
+			stmts.back().attr_list.attrs.push_back(dot_a_list());
+			stmts.back().attr_list.attrs.back().as.push_back(pair<string, string>("shape", "circle"));
+			stmts.back().attr_list.attrs.back().as.push_back(pair<string, string>("width", "0.25"));
+			stmts.back().attr_list.attrs.back().as.push_back(pair<string, string>("label", ""));
+			for (size_t j = 0; j < next.size(); j++)
+			{
+				stmts.push_back(dot_stmt());
+				stmts.back().stmt_type = "edge";
+				stmts.back().node_ids.push_back(next[j]);
+				stmts.back().node_ids.push_back(semi);
+			}
+			result.push_back(semi);
+		}
+
+		if (operators.size() > 0 && (operators.front() == "||" || operators.front() == ","))
+		{
+			dot_node_id semi("S" + to_string(num_places++));
+			stmts.push_back(dot_stmt());
+			stmts.back().stmt_type = "node";
+			stmts.back().node_ids.push_back(semi);
+			stmts.back().attr_list.attrs.push_back(dot_a_list());
+			stmts.back().attr_list.attrs.back().as.push_back(pair<string, string>("shape", "circle"));
+			stmts.back().attr_list.attrs.back().as.push_back(pair<string, string>("width", "0.25"));
+			stmts.back().attr_list.attrs.back().as.push_back(pair<string, string>("label", ""));
+			for (size_t j = 0; j < last.size(); j++)
+			{
+				stmts.push_back(dot_stmt());
+				stmts.back().stmt_type = "edge";
+				stmts.back().node_ids.push_back(last[j]);
+				stmts.back().node_ids.push_back(semi);
+			}
+			prev = vector<dot_node_id>(1, semi);
+		}
+
+		next = terms[i]->build_hse(vars, stmts, prev, num_places, num_transitions);
+	}
+
+	if (operators.size() == 0 || operators.back() == ";")
+		result.insert(result.end(), next.begin(), next.end());
 	else
-		delete a;
+	{
+		dot_node_id semi("S" + to_string(num_places++));
+		stmts.push_back(dot_stmt());
+		stmts.back().stmt_type = "node";
+		stmts.back().node_ids.push_back(semi);
+		stmts.back().attr_list.attrs.push_back(dot_a_list());
+		stmts.back().attr_list.attrs.back().as.push_back(pair<string, string>("shape", "circle"));
+		stmts.back().attr_list.attrs.back().as.push_back(pair<string, string>("width", "0.25"));
+		stmts.back().attr_list.attrs.back().as.push_back(pair<string, string>("label", ""));
+		for (size_t j = 0; j < next.size(); j++)
+		{
+			stmts.push_back(dot_stmt());
+			stmts.back().stmt_type = "edge";
+			stmts.back().node_ids.push_back(next[j]);
+			stmts.back().node_ids.push_back(semi);
+		}
+		result.push_back(semi);
 
-	return p;
+		dot_node_id trans("T" + to_string(num_transitions++));
+		stmts.push_back(dot_stmt());
+		stmts.back().stmt_type = "node";
+		stmts.back().node_ids.push_back(trans);
+		stmts.back().attr_list.attrs.push_back(dot_a_list());
+		stmts.back().attr_list.attrs.back().as.push_back(pair<string, string>("shape", "plaintext"));
+		stmts.back().attr_list.attrs.back().as.push_back(pair<string, string>("label", "1"));
+		for (size_t j = 0; j < result.size(); j++)
+		{
+			stmts.push_back(dot_stmt());
+			stmts.back().stmt_type = "edge";
+			stmts.back().node_ids.push_back(result[j]);
+			stmts.back().node_ids.push_back(trans);
+		}
+		result = vector<dot_node_id>(1, trans);
+	}
+
+	return result;
 }
 
-instruction *composition::expand_condition(sstring chp)
+void composition::hide(variable_space &vars, vector<variable_index> uids)
 {
-	sequential *s = new sequential(this, "", vars, flags);
-	parallel *p = new parallel(s, "", vars, flags);
-	condition *a = new condition(s, chp, vars, flags);
-	pair<sstring, instruction*> result;
-	list<pair<sequential*, guard*> >::iterator i;
-
-	for (i = a->instrs.begin(); i != a->instrs.end(); i++)
+	for (size_t i = 0; i < terms.size();)
 	{
-		if (i->second->chp.find_first_of("&|~^=<>/+-*?#()") != sstring::npos)
+		terms[i]->hide(vars, uids);
+		if ((terms[i]->kind() == "assignment" && ((assignment*)terms[i])->expr.size() == 0) ||
+			(terms[i]->kind() == "composition" && ((composition*)terms[i])->terms.size() == 0))
+			terms.erase(terms.begin() + i);
+		else
+			i++;
+	}
+}
+
+void composition::print(ostream &os, string newl)
+{
+	if (operators.size() > 0 && operators.back() == "||")
+		os << "(" << newl;
+
+	size_t i = 0;
+	for (i = 0; (i == 0 || i-1 < operators.size()) && i < terms.size(); i++)
+	{
+		if (operators.size() > 0 && operators.back() == "||")
 		{
-			result = a->expand_guard(i->second->chp);
-			i->second->chp = result.first;
-			if (result.second != NULL)
-			{
-				result.second->parent = p;
-				p->push(result.second);
-			}
+			os << "\t";
+			terms[i]->print(os, (terms.size() > 1 ? newl+"\t" : newl));
+		}
+		else
+			terms[i]->print(os, newl);
+
+		if (i < operators.size())
+		{
+			os << operators[i];
+			if (operators.size() > 0 && operators.back() == "||")
+				os << newl;
 		}
 	}
 
-	if (p->instrs.size() == 0)
-	{
-		delete p;
-		delete s;
-		a->parent = this;
-		return a;
-	}
-
-	s->push(p);
-	s->push(a);
-
-	return s;
+	if (operators.size() > 0 && operators.back() == "||")
+		os << newl << ")";
 }
 
-instruction *composition::expand_loop(sstring chp)
+ostream &operator<<(ostream &os, const composition &a)
 {
-	sequential *s = new sequential(this, "", vars, flags);
-	parallel *p = new parallel(s, "", vars, flags);
-	loop *a = new loop(s, chp, vars, flags);
-	pair<sstring, instruction*> result;
-	list<pair<sequential*, guard*> >::iterator i;
+	if (a.operators.size() > 0 && a.operators.back() == "||")
+		os << "(";
 
-	for (i = a->instrs.begin(); i != a->instrs.end(); i++)
-		if (i->second->chp.find_first_of("&|~^=<>/+-*?#()") != sstring::npos)
-		{
-			result = a->expand_guard(i->second->chp);
-			i->second->chp = result.first;
-			result.second->parent = p;
-			p->push(result.second);
-		}
+	size_t i = 0;
+	for (i = 0; i < a.operators.size() && i < a.terms.size(); i++)
+		cout << a.terms[i] << a.operators[i];
 
-	if (p->instrs.size() == 0)
-	{
-		delete p;
-		delete s;
-		a->parent = this;
-		return a;
-	}
+	if (i < a.terms.size())
+		cout << a.terms[i];
 
-	s->push(p);
-	s->push(a);
+	if (a.operators.size() > 0 && a.operators.back() == "||")
+		os << ")";
 
-	return s;
+	return os;
 }
