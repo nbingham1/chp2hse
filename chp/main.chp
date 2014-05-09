@@ -62,38 +62,6 @@ process pchb_split(a4pe1of2 L, a4pe1of2 S, a4pe1of2 A, a4pe1of2 B)
 	 ]
 }
 
-process pchb_split1(a4pe1of2 L, a4pe1of2 S, a4pe1of2 A, a4pe1of2 B)
-{
-	node<1> en := 1;
-	*[(
-		[  A.e & S.r.f & L.r.f -> A.r.f+
-		[] A.e & S.r.f & L.r.t -> A.r.t+
-		[] S.r.t -> skip
-		] ||
-		[  B.e & S.r.t & L.r.f -> B.r.f+
-		[] B.e & S.r.t & L.r.t -> B.r.t+
-		[] S.r.f -> skip
-		]
-	  ); en-; (S.e- || L.e-);
-	  (
-		[~A.e | ~A.r.f & ~A.r.t -> (A.r.f- || A.r.t-)] ||
-		[~B.e | ~B.r.f & ~B.r.t -> (B.r.f- || B.r.t-)]
-	  ); [~S.r.f & ~S.r.t & ~L.r.f & ~L.r.t]; en+; (S.e+ || L.e+)
-	 ]
-}
-{
-	*[[A.r.t | A.r.f]; A.e-; [~A.r.t & ~A.r.f]; A.e+] ||
-	*[[B.r.t | B.r.f]; B.e-; [~B.r.t & ~B.r.f]; B.e+] ||
-	*[[ 1 -> L.r.t+
-	  []1 -> L.r.f+
-	  ]; [~L.e]; (L.r.t-||L.r.f-); [L.e]
-	 ] ||
-	*[[ 1 -> S.r.t+
-	  []1 -> S.r.f+
-	  ]; [~S.e]; (S.r.t-||S.r.f-); [S.e]
-	 ]
-}
-
 process pchb_FA(a4pe1of2 Ci, a4pe1of2 A, a4pe1of2 B, a4pe1of2 S, a4pe1of2 Co)
 {
 	node<1> Fe := 1;
@@ -247,24 +215,12 @@ process fifo0b(a4pa L, a4pa R)
 	*[L?;R!]
 }
 
-process adder(a4pe1of2 L0, a4pe1of2 L1, a4pe1of2 R)
-{
-	*[R!(L0?^L1?)]
-}
-
 process fifo1b(a4pa1of2 L, a4pa1of2 R)
 {
 	dualrail i;
 	
 	*[L?i;R!i]
 }
-
-/*process fifo2b(achan4p2b L, achan4p2b R)
-{
-	node<2> i;
-	
-	*[L?i;R!i]
-}*/
 
 process fork0b(a4pa L, a4pa R1, a4pa R2)
 {
@@ -277,72 +233,3 @@ process fork1b(a4pa1of2 L, a4pa1of2 R1, a4pa1of2 R2)
 	
 	*[L?val;(R1!val||R2!val)]
 }
-
-/*process fork2b(achan4p2b L, achan4p2b R1, achan4p2b R2)
-{
-	node<2> val;
-	
-	*[L?val;(R1!val||R2!val)]
-}*/
-
-process reg0b(p4pa R, a4pa W)
-{
-	*[	
-		[	#R -> R!
-		:	#W -> W?
-		]
-	]
-}
-
-process reg1b(p4pa1of2 R, a4pa1of2 W)
-{
-	dualrail val;
-
-	*[	
-		[	#R -> R!val
-		:	#W -> W?val
-		]
-	]
-}
-
-/*process reg2b(pchan4p2b R, achan4p2b W)
-{
-	node<2> val;
-
-	*[
-		[	#R -> R!val
-		:	#W -> W?val
-		]
-	]
-}*/
-
-process merge0b2(a4pa L1, a4pa L2, a4pa R)
-{
-	*[
-		[	#L1 -> L1?
-		:	#L2 -> L2?
-		]; R!
-	]
-}
-
-process merge1b2(a4pa1of2 L1, a4pa1of2 L2, a4pa1of2 R)
-{
-	dualrail val;
-
-	*[
-		[	#L1 -> L1?val
-		:	#L2 -> L2?val
-		]; R!val
-	]
-}
-
-/*process merge2b2(a4pa1of2 L1, a4pa1of2 L2, a4pa1of2 R)
-{
-	node<2> val;
-	
-	*[
-		[	#L1 -> L1?val
-		:	#L2 -> L2?val
-		]; R!val
-	]
-}*/
