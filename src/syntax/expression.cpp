@@ -1202,17 +1202,21 @@ string hide(tokenizer &tokens, variable_space &vars, vector<variable_index> uids
 	string result;
 	string half;
 	string expr;
+	bool half_left = false;
+	bool half_right = false;
+	bool left = false;
+	bool right = false;
+
+
 	do
 	{
-		if (half != "")
-			result += "|";
+		left = (half != "");
 
-		expr = "";
+		half = "";
 
 		do
 		{
-			if (expr != "")
-				half += "&";
+			half_left = (expr != "");
 
 			bool invert = false;
 			while (tokens.peek_next() == "~" && tokens.next() == "~")
@@ -1252,9 +1256,18 @@ string hide(tokenizer &tokens, variable_space &vars, vector<variable_index> uids
 				}
 			}
 
+			half_right = (expr != "");
+
+			if (half_left && half_right)
+				half += "&";
 
 			half += expr;
 		} while (tokens.peek_next() == "&" && tokens.next() == "&");
+
+		right = (half != "");
+
+		if (left && right)
+			result += "|";
 
 		result += half;
 	} while (tokens.peek_next() == "|" && tokens.next() == "|");
