@@ -17,7 +17,7 @@ program::~program()
 
 /**
  */
-bool program::parse(tokenizer &tokens)
+bool program::parse(tokenizer &tokens, vector<string> include_dirs)
 {
 	while (tokens.peek_next() != "")
 	{
@@ -37,7 +37,7 @@ bool program::parse(tokenizer &tokens)
 		tokens.push_bound("[process]");
 		tokens.push_bound("[operator]");
 		if (preprocessor::is_next(tokens))
-			preprocessor(tokens, *this);
+			preprocessor(tokens, include_dirs, *this);
 		else if (process::is_next(tokens))
 			types.insert(tokens, new process(tokens, types));
 		else if (operate::is_next(tokens))

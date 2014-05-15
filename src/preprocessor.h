@@ -20,11 +20,11 @@ struct program;
 struct preprocessor
 {
 	preprocessor();
-	preprocessor(tokenizer &tokens, program &prgm);
+	preprocessor(tokenizer &tokens, vector<string> include_dirs, program &prgm);
 	~preprocessor();
 
 	static bool is_next(tokenizer &tokens, size_t i = 1);
-	void parse(tokenizer &tokens, program &prgm);
+	void parse(tokenizer &tokens, vector<string> include_dirs, program &prgm);
 };
 
 #endif

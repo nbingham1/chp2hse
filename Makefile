@@ -1,15 +1,20 @@
-CXXFLAGS =	-O2 -g -Wall -fmessage-length=0
+CXXFLAGS	 =  -O2 -g -Wall -fmessage-length=0
+SOURCES	    :=  $(shell find src -name '*.cpp')
+OBJECTS	    :=  $(SOURCES:src/%.cpp=build/%.o)
+DIRECTORIES :=  $(sort $(dir $(OBJECTS)))
+LDFLAGS		 =  
+TARGET		 =  chp2hse
 
-OBJS =		src/chp.o src/common.o src/instruction.o src/keyword.o src/message.o src/program.o src/preprocessor.o src/syntax/assignment.o src/syntax/channel.o src/syntax/composition.o src/syntax/constant.o src/syntax/control.o src/syntax/dot.o src/syntax/expression.o src/syntax/debug.o src/syntax/declaration.o src/syntax/variable_name.o src/syntax/type_name.o src/syntax/operator.o src/syntax/process.o src/syntax/record.o src/syntax/skip.o src/syntax/slice.o src/tokenizer.o src/syntax/instance.o src/variable_space.o src/variable.o
+all: build $(TARGET)
 
-LIBS =
+$(TARGET): $(OBJECTS)
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) $(OBJECTS) -o $(TARGET)
 
-TARGET =	chp2hse
-
-$(TARGET):	$(OBJS)
-	$(CXX) -o $(TARGET) $(OBJS) $(LIBS)
-
-all:	$(TARGET)
+build/%.o: src/%.cpp 
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) -c -o $@ $<
+	
+build:
+	mkdir $(DIRECTORIES)
 
 clean:
-	rm -f $(OBJS) $(TARGET)
+	rm -f $(OBJECTS) $(TARGET) $(TARGET).exe

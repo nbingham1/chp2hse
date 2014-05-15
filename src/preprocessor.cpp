@@ -14,9 +14,9 @@ preprocessor::preprocessor()
 
 }
 
-preprocessor::preprocessor(tokenizer &tokens, program &prgm)
+preprocessor::preprocessor(tokenizer &tokens, vector<string> include_dirs, program &prgm)
 {
-	parse(tokens, prgm);
+	parse(tokens, include_dirs, prgm);
 }
 
 preprocessor::~preprocessor()
@@ -33,7 +33,7 @@ bool preprocessor::is_next(tokenizer &tokens, size_t i)
 
 /** Parse a preprocessor command assuming that there is a preprocessor command next in the token stream.
   */
-void preprocessor::parse(tokenizer &tokens, program &prgm)
+void preprocessor::parse(tokenizer &tokens, vector<string> include_dirs, program &prgm)
 {
 	tokens.increment();
 	tokens.push_expected("#");
@@ -63,6 +63,9 @@ void preprocessor::parse(tokenizer &tokens, program &prgm)
 		{
 			ifstream fin;
 			fin.open(filename.c_str(), ios::binary | ios::in);
+			for (size_t i = 0; !fin.is_open() && i < include_dirs.size(); i++)
+				fin.open((include_dirs[i] + filename).c_str(), ios::binary | ios::in);
+
 			if (!fin.is_open())
 				error(tokens, "file not found '" + filename + "'", "", __FILE__, __LINE__);
 			else
@@ -75,7 +78,7 @@ void preprocessor::parse(tokenizer &tokens, program &prgm)
 				fin.read(&buffer[0], size);
 				fin.clear();
 				tokenizer recurse(filename, buffer);
-				if (!prgm.parse(recurse))
+				if (!prgm.parse(recurse, include_dirs))
 					log(tokens, tokens.line(tokens.index), __FILE__, __LINE__);
 				prgm.loading.pop_back();
 			}

@@ -28,7 +28,7 @@ struct program
 	vector<string> loaded;
 	vector<string> loading;
 
-	bool parse(tokenizer &tokens);
+	bool parse(tokenizer &tokens, vector<string> include_dirs);
 };
 
 #endif
