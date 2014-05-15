@@ -58,7 +58,7 @@ int main(int argc, char **argv)
 				int error_code = stat(output.c_str(), &status);
 				if (error_code == -1)
 				{
-					if (mkdir(output.c_str()) != 0)
+					if (mkdir(output.c_str(), 755) != 0)
 						error("", "could not create directory \'" + output + "\'", "", __FILE__, __LINE__);
 				}
 				else if (!(status.st_mode & S_IFDIR))
