@@ -13,15 +13,16 @@ int num_warnings = 0;
 int num_internal = 0;
 int num_notes = 0;
 int num_log = 0;
+bool verbose = false;
 
-void internal(tokenizer &tokens, string internal, string debug_file, int debug_line)
+void internal(tokenizer &tokens, string internal, string debug_file, int debug_line, int offset)
 {
 	size_t i = tokens.index < tokens.tokens.size() ? tokens.index : 0;
 
-	size_t col_start = tokens.tokens[i].col+1;
+	size_t col_start = tokens.tokens[i].col+1+offset;
 	size_t col_end = 1;
 	string str = tokens.line(i);
-	for (size_t j = 0; j < str.size() && j < tokens.tokens[i].col; j++)
+	for (size_t j = 0; j < str.size() && j < tokens.tokens[i].col+offset; j++)
 	{
 		if (str[j] != '\t')
 		{
@@ -31,7 +32,7 @@ void internal(tokenizer &tokens, string internal, string debug_file, int debug_l
 		else
 			col_end+=8;
 	}
-	str.resize(tokens.tokens[i].col, ' ');
+	str.resize(tokens.tokens[i].col+offset, ' ');
 
 	cout << debug_file << ":" << debug_line << ":";
 	cout << tokens.file(i) << ":" << tokens.tokens[i].line+1 << ":" << col_start << "-" << col_end << ": internal failure: " << internal << endl;
@@ -41,14 +42,14 @@ void internal(tokenizer &tokens, string internal, string debug_file, int debug_l
 	num_internal++;
 }
 
-void error(tokenizer &tokens, string error, string note, string debug_file, int debug_line)
+void error(tokenizer &tokens, string error, string note, string debug_file, int debug_line, int offset)
 {
 	size_t i = tokens.index < tokens.tokens.size() ? tokens.index : 0;
 
-	size_t col_start = tokens.tokens[i].col+1;
+	size_t col_start = tokens.tokens[i].col+1+offset;
 	size_t col_end = 1;
 	string str = tokens.line(i);
-	for (size_t j = 0; j < str.size() && j < tokens.tokens[i].col; j++)
+	for (size_t j = 0; j < str.size() && j < tokens.tokens[i].col+offset; j++)
 	{
 		if (str[j] != '\t')
 		{
@@ -58,7 +59,7 @@ void error(tokenizer &tokens, string error, string note, string debug_file, int 
 		else
 			col_end+=8;
 	}
-	str.resize(tokens.tokens[i].col, ' ');
+	str.resize(tokens.tokens[i].col+offset, ' ');
 
 #ifdef DEBUG
 	cout << debug_file << ":" << debug_line << ":";
@@ -77,14 +78,14 @@ void error(tokenizer &tokens, string error, string note, string debug_file, int 
 	num_errors++;
 }
 
-void warning(tokenizer &tokens, string warning, string note, string debug_file, int debug_line)
+void warning(tokenizer &tokens, string warning, string note, string debug_file, int debug_line, int offset)
 {
 	size_t i = tokens.index < tokens.tokens.size() ? tokens.index : 0;
 
-	size_t col_start = tokens.tokens[i].col+1;
+	size_t col_start = tokens.tokens[i].col+1+offset;
 	size_t col_end = 1;
 	string str = tokens.line(i);
-	for (size_t j = 0; j < str.size() && j < tokens.tokens[i].col; j++)
+	for (size_t j = 0; j < str.size() && j < tokens.tokens[i].col+offset; j++)
 	{
 		if (str[j] != '\t')
 		{
@@ -94,7 +95,7 @@ void warning(tokenizer &tokens, string warning, string note, string debug_file, 
 		else
 			col_end+=8;
 	}
-	str.resize(tokens.tokens[i].col, ' ');
+	str.resize(tokens.tokens[i].col+offset, ' ');
 
 #ifdef DEBUG
 	cout << debug_file << ":" << debug_line << ":";
@@ -113,14 +114,14 @@ void warning(tokenizer &tokens, string warning, string note, string debug_file, 
 	num_warnings++;
 }
 
-void note(tokenizer &tokens, string note, string debug_file, int debug_line)
+void note(tokenizer &tokens, string note, string debug_file, int debug_line, int offset)
 {
 	size_t i = tokens.index < tokens.tokens.size() ? tokens.index : 0;
 
-	size_t col_start = tokens.tokens[i].col+1;
+	size_t col_start = tokens.tokens[i].col+1+offset;
 	size_t col_end = 1;
 	string str = tokens.line(i);
-	for (size_t j = 0; j < str.size() && j < tokens.tokens[i].col; j++)
+	for (size_t j = 0; j < str.size() && j < tokens.tokens[i].col+offset; j++)
 	{
 		if (str[j] != '\t')
 		{
@@ -130,7 +131,7 @@ void note(tokenizer &tokens, string note, string debug_file, int debug_line)
 		else
 			col_end+=8;
 	}
-	str.resize(tokens.tokens[i].col, ' ');
+	str.resize(tokens.tokens[i].col+offset, ' ');
 
 #ifdef DEBUG
 	cout << debug_file << ":" << debug_line << ":";
@@ -142,15 +143,18 @@ void note(tokenizer &tokens, string note, string debug_file, int debug_line)
 	num_notes++;
 }
 
-void log(tokenizer &tokens, string log, string debug_file, int debug_line)
+void log(tokenizer &tokens, string log, string debug_file, int debug_line, int offset)
 {
-	size_t i = tokens.index+1 < tokens.tokens.size() ? tokens.index+1 : 0;
-#ifdef DEBUG
-	cout << debug_file << ":" << debug_line << ":";
-#endif
-	cout << tokens.file(i) << ":" << tokens.tokens[i].line+1 << ":" << tokens.tokens[i].col+1 << ": " << log << endl;
+	if (verbose)
+	{
+		size_t i = tokens.index+1 < tokens.tokens.size() ? tokens.index+1 : 0;
+	#ifdef DEBUG
+		cout << debug_file << ":" << debug_line << ":";
+	#endif
+		cout << tokens.file(i) << ":" << tokens.tokens[i].line+1 << ":" << tokens.tokens[i].col+1+offset << ":\t" << log << endl;
 
-	num_log++;
+		num_log++;
+	}
 }
 
 void internal(string location, string internal, string debug_file, int debug_line)
@@ -218,14 +222,39 @@ void note(string location, string note, string debug_file, int debug_line)
 
 void log(string location, string log, string debug_file, int debug_line)
 {
+	if (verbose)
+	{
+	#ifdef DEBUG
+		cout << debug_file << ":" << debug_line << ":";
+		if (location == "")
+			cout << "\t";
+	#endif
+		if (location != "")
+			cout << location << ":\t";
+		cout << log << endl;
+
+		num_log++;
+	}
+}
+
+void progress(string location, string log, string debug_file, int debug_line)
+{
+	cout << "\r";
 #ifdef DEBUG
 	cout << debug_file << ":" << debug_line << ":";
+	if (location == "")
+		cout << "\t";
 #endif
 	if (location != "")
-		cout << location << ": ";
-	cout << log << endl;
+		cout << location << ":\t";
+	cout << log << "                    ";
+	cout.flush();
+}
 
-	num_log++;
+void done_progress()
+{
+	cout << "\r";
+	cout.flush();
 }
 
 void complete()
@@ -239,4 +268,19 @@ void complete()
 bool is_clean()
 {
 	return (num_internal == 0 && num_errors == 0);
+}
+
+void set_verbose(bool value)
+{
+	verbose = value;
+}
+
+void unset_verbose()
+{
+	verbose = false;
+}
+
+bool get_verbose()
+{
+	return verbose;
 }
