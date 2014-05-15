@@ -95,6 +95,7 @@ int main(int argc, char **argv)
 			if (i+1 < argc)
 			{
 				i++;
+				arg = argv[i];
 				size_t j, k;
 				for (j = 0, k = arg.find_first_of(","); j < arg.size() && k != string::npos; j=k+1, k = arg.find_first_of(",", j))
 					process_names.push_back(arg.substr(j, k-j));
