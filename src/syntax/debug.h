@@ -18,13 +18,15 @@
  * enforce	- Tries to make the statement true at all points in time. Throws an error if the statement
  * 			  conflicts with known information about the state space.
  *
- * TODO
+ * TODO Add an allow debug statement that modifies the timing assumptions used for a particular process
  * allow	- Modifies the timing assumptions used for a particular process.
  * 			  __di__		Force a strict delay insensitive circuit
  * 			  __qdi__		Allow isochronic forks.
  * 			  __bounded__	Allow delay lines with a bounded delay.
  * 			  __mesosync__	Allow mesosynchronoous architecture.
  * 			  __sync__		Allow synchronous architecture.
+ *
+ * TODO Fix debug so that it is an attribute of an instruction instead of standing alone.
  */
 struct debug : instruction
 {

@@ -6,14 +6,14 @@ process wchb(a4pe1of2 R, a4pe1of2 L)
 	*[
 		[	R.e & L.r.t -> R.r.t+
 		[]	R.e & L.r.f -> R.r.f+
-		]; L.e-; [~R.e & ~L.r.t & ~L.r.f]; (R.r.t- || R.r.f-); L.e+
+		]; L.e-; [~R.e & ~L.r.t & ~L.r.f]; R.r.t-, R.r.f-; L.e+
 	]
 }
 {
 	*[[R.r.t | R.r.f]; R.e-; [~R.r.t & ~R.r.f]; R.e+] ||
 	*[[ 1 -> L.r.t+
 	  []1 -> L.r.f+
-	  ]; [~L.e]; (L.r.t-||L.r.f-); [L.e]
+	  ]; [~L.e]; L.r.t-,L.r.f-; [L.e]
 	 ]
 }
 
@@ -22,7 +22,7 @@ process pchb(a4pe1of2 R, a4pe1of2 L)
 	*[
 		[	R.e & L.r.t -> R.r.t+ 
 		[]	R.e & L.r.f -> R.r.f+
-		]; L.e-; [~R.e]; (R.r.t- || R.r.f-); [~L.r.t & ~L.r.f]; L.e+
+		]; L.e-; [~R.e]; R.r.t-, R.r.f-; [~L.r.t & ~L.r.f]; L.e+
 	]
 }
 {
@@ -35,18 +35,22 @@ process pchb(a4pe1of2 R, a4pe1of2 L)
 
 process pchb_split(a4pe1of2 L, a4pe1of2 S, a4pe1of2 A, a4pe1of2 B)
 {
-	node<1> en := 1;
-	*[(
+	node<1> Fe := 1;
+	*[
+	  (
 		[  A.e & S.r.f & L.r.f -> A.r.f+
 		[] A.e & S.r.f & L.r.t -> A.r.t+
-		[] B.e & S.r.t & L.r.f -> B.r.f+
+		[] S.r.t -> skip
+		]||
+		[  B.e & S.r.t & L.r.f -> B.r.f+
 		[] B.e & S.r.t & L.r.t -> B.r.t+
+		[] S.r.f -> skip
 		]
-	  ); en-; (S.e- || L.e-);
+	  ); Fe-; S.e-, L.e-;
 	  (
-		[~A.e | ~A.r.f & ~A.r.t -> (A.r.f- || A.r.t-)] ||
-		[~B.e | ~B.r.f & ~B.r.t -> (B.r.f- || B.r.t-)]
-	  ); [~S.r.f & ~S.r.t & ~L.r.f & ~L.r.t]; en+; (S.e+ || L.e+)
+		[~A.e | ~A.r.f & ~A.r.t -> A.r.f-, A.r.t-] ||
+		[~B.e | ~B.r.f & ~B.r.t -> B.r.f-, B.r.t-]
+	  ); [~S.r.f & ~S.r.t & ~L.r.f & ~L.r.t -> Fe+; S.e+, L.e+]
 	 ]
 }
 {
@@ -64,7 +68,6 @@ process pchb_split(a4pe1of2 L, a4pe1of2 S, a4pe1of2 A, a4pe1of2 B)
 
 process pchb_FA(a4pe1of2 Ci, a4pe1of2 A, a4pe1of2 B, a4pe1of2 S, a4pe1of2 Co)
 {
-	node<1> Fe := 1;
 	*[
 		(
 			[	S.e & (A.r.t & B.r.f & Ci.r.f | A.r.f & B.r.t & Ci.r.f | A.r.f & B.r.f & Ci.r.t | A.r.t & B.r.t & Ci.r.t) -> S.r.t+ 
@@ -73,16 +76,12 @@ process pchb_FA(a4pe1of2 Ci, a4pe1of2 A, a4pe1of2 B, a4pe1of2 S, a4pe1of2 Co)
 			[   Co.e & (A.r.t & B.r.t & Ci.r.f | A.r.t & B.r.f & Ci.r.t | A.r.f & B.r.t & Ci.r.t | A.r.t & B.r.t & Ci.r.t) -> Co.r.t+
 			[]  Co.e & (A.r.t & B.r.f & Ci.r.f | A.r.f & B.r.t & Ci.r.f | A.r.f & B.r.f & Ci.r.t | A.r.f & B.r.f & Ci.r.f) -> Co.r.f+
 			]
-		); Fe-; (A.e- || B.e- || Ci.e-);
+		); A.e-,B.e-,Ci.e-;
 		(
-			([~S.e]; (S.r.t- || S.r.f-)) ||
-			([~Co.e]; (Co.r.t- || Co.r.f-))			
-		); [~A.r.t & ~A.r.f & ~B.r.t & ~B.r.f & ~Ci.r.t & ~Ci.r.f]; Fe+;
-		(
-			A.e+ ||
-			B.e+ ||
-			Ci.e+
-		)
+			[~S.e -> S.r.t-,S.r.f-] ||
+			[~Co.e -> Co.r.t-,Co.r.f-]		
+		); [~A.r.t & ~A.r.f & ~B.r.t & ~B.r.f & ~Ci.r.t & ~Ci.r.f];
+		A.e+,B.e+,Ci.e+
 	]
 }
 {
@@ -104,7 +103,6 @@ process pchb_FA(a4pe1of2 Ci, a4pe1of2 A, a4pe1of2 B, a4pe1of2 S, a4pe1of2 Co)
 
 process wchb_FA(a4pe1of2 Ci, a4pe1of2 A, a4pe1of2 B, a4pe1of2 S, a4pe1of2 Co)
 {
-	node<1> Fe := 1;
 	*[
 		(
 			[	S.e & (A.r.t & B.r.f & Ci.r.f | A.r.f & B.r.t & Ci.r.f | A.r.f & B.r.f & Ci.r.t | A.r.t & B.r.t & Ci.r.t) -> S.r.t+ 
@@ -113,12 +111,12 @@ process wchb_FA(a4pe1of2 Ci, a4pe1of2 A, a4pe1of2 B, a4pe1of2 S, a4pe1of2 Co)
 			[   Co.e & (A.r.t & B.r.t & Ci.r.f | A.r.t & B.r.f & Ci.r.t | A.r.f & B.r.t & Ci.r.t | A.r.t & B.r.t & Ci.r.t) -> Co.r.t+
 			[]  Co.e & (A.r.t & B.r.f & Ci.r.f | A.r.f & B.r.t & Ci.r.f | A.r.f & B.r.f & Ci.r.t | A.r.f & B.r.f & Ci.r.f) -> Co.r.f+
 			]
-		); Fe-; (A.e- || B.e- || Ci.e-);
+		); A.e-,B.e-,Ci.e-;
 		(
-			([~S.e & ~A.r.t & ~A.r.f & ~Ci.r.f]; (S.r.t- || S.r.f-)) ||
-			([~Co.e & ~B.r.t & ~B.r.f & ~Ci.r.t]; (Co.r.t- || Co.r.f-))			
+			[~S.e & ~A.r.t & ~A.r.f & ~Ci.r.f]; S.r.t-,S.r.f- ||
+			[~Co.e & ~B.r.t & ~B.r.f & ~Ci.r.t]; Co.r.t-,Co.r.f-			
 		); 
-		Fe+; (A.e+ || B.e+ || Ci.e+)
+		A.e+,B.e+,Ci.e+
 	]
 }
 {
@@ -140,7 +138,6 @@ process wchb_FA(a4pe1of2 Ci, a4pe1of2 A, a4pe1of2 B, a4pe1of2 S, a4pe1of2 Co)
 
 process pcfb_FA(a4pe1of2 Ci, a4pe1of2 A, a4pe1of2 B, a4pe1of2 S, a4pe1of2 Co)
 {
-	node<1> Fe := 1;
 	node<1> en := 1;
 	*[
 		(
@@ -150,11 +147,11 @@ process pcfb_FA(a4pe1of2 Ci, a4pe1of2 A, a4pe1of2 B, a4pe1of2 S, a4pe1of2 Co)
 			[   Co.e & (A.r.t & B.r.t & Ci.r.f | A.r.t & B.r.f & Ci.r.t | A.r.f & B.r.t & Ci.r.t | A.r.t & B.r.t & Ci.r.t) -> Co.r.t+
 			[]  Co.e & (A.r.t & B.r.f & Ci.r.f | A.r.f & B.r.t & Ci.r.f | A.r.f & B.r.f & Ci.r.t | A.r.f & B.r.f & Ci.r.f) -> Co.r.f+
 			]
-		); Fe-; (A.e- || B.e- || Ci.e-); en-;
+		); A.e-,B.e-,Ci.e-; en-;
 		(
-			([~S.e]; (S.r.t- || S.r.f-)) ||
-			([~Co.e]; (Co.r.t- || Co.r.f-)) ||
-			([~A.r.t & ~A.r.f & ~B.r.t & ~B.r.f & ~Ci.r.t & ~Ci.r.f]; Fe+; (A.e+ ||B.e+ ||Ci.e+))
+			[~S.e -> S.r.t-, S.r.f-] ||
+			[~Co.e -> Co.r.t-, Co.r.f-] ||
+			[~A.r.t & ~A.r.f & ~B.r.t & ~B.r.f & ~Ci.r.t & ~Ci.r.f]; A.e+,B.e+,Ci.e+
 		);
 		en+
 	]
@@ -184,8 +181,8 @@ process pcfb(a4pe1of2 R, a4pe1of2 L)
 		[]	R.e & L.r.f -> R.r.f+
 		]; L.e-; en-;
 		(
-			([~R.e]; (R.r.t- || R.r.f-)) || 
-			([~L.r.t & ~L.r.f]; L.e+)
+			[~R.e -> R.r.t-, R.r.f-] || 
+			[~L.r.t & ~L.r.f -> L.e+]
 		); en+ 
 	]
 }

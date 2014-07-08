@@ -66,6 +66,8 @@ uint32_t bitwise_not(uint32_t a);
 
 string readfile(string filename);
 
+int mkdir(string path);
+
 //#define DEBUG
 
 #endif

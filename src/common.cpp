@@ -283,3 +283,12 @@ uint32_t bitwise_not(uint32_t a)
 {
 	return !a;
 }
+
+int mkdir(string path)
+{
+#ifdef __WIN32
+	return mkdir(path.c_str());
+#else
+	return mkdir(path.c_str(), 0755);
+#endif
+}
