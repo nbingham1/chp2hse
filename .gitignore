@@ -1,0 +1,9 @@
+*.o
+*.d
+*.a
+*.so
+*.hse
+*.dot
+*.prs
+*.png
+chp2hse
