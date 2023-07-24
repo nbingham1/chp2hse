@@ -390,7 +390,7 @@ void tokenizer::insert(string filename, string contents)
 				files.back().second.push_back("");
 				line++;
 				col = 0;
-				if (at(tokens.size()-1) == "//")
+				if (tokens.size() > 0 && at(tokens.size()-1) == "//")
 					tokens.pop_back();
 			}
 			else if (contents[start] != '\r')
